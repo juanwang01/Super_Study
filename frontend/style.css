@@ -482,3 +482,24 @@ button:hover { background: var(--primary-dark); }
 .invite-row .mini-btn { margin-left: auto; }
 #adminModal details summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; color: var(--primary); }
 #adminModal details { margin-top: 10px; }
+
+/* ===== 管理后台：三 Tab 分区 ===== */
+.admin-tabs { display: flex; gap: 8px; border-bottom: 2px solid var(--border); margin-bottom: 14px; }
+.admin-tab { background: transparent; border: none; padding: 8px 16px; font-size: 14px; font-weight: 600; color: #666; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.admin-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.admin-pane { min-height: 120px; }
+
+/* ===== LLM 配置卡片 ===== */
+.admin-llm-card { background: #f7f9fc; border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+.admin-status { font-size: 13px; line-height: 1.7; margin-bottom: 10px; }
+.admin-llm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.test-btn { color: var(--primary); border-color: var(--primary); }
+.danger-btn { color: #d54941; border-color: #d54941; background: #fff; }
+.danger-btn:hover { background: #fff1f0; }
+.admin-llm-form { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+.admin-llm-form label { display: block; margin: 10px 0 4px; font-size: 13px; font-weight: 600; }
+
+/* ===== 确认弹层 ===== */
+.modal-sm { max-width: 380px; }
+.confirm-msg { font-size: 14px; line-height: 1.7; margin: 12px 0 16px; white-space: pre-line; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }

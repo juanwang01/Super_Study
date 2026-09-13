@@ -43,7 +43,9 @@ app.include_router(admin_api.router)
 # 静态前端
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    resp = FileResponse(FRONTEND_DIR / "index.html")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 
 if FRONTEND_DIR.exists():

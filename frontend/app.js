@@ -109,6 +109,16 @@ async function api(path, method = "GET", body = null) {
 }
 
 // ---------------------------------------------------------------------------
+// 系统确认弹层（内置浏览器会拦截 window.confirm）
+// ---------------------------------------------------------------------------
+let confirmCb = null;
+function askConfirm(msg, cb) {
+  $("confirmMsg").textContent = msg;
+  $("confirmModal").classList.remove("hidden");
+  confirmCb = cb;
+}
+
+// ---------------------------------------------------------------------------
 // 用户认证：登录 / 注册 / 登出 / 视图切换
 // ---------------------------------------------------------------------------
 function setAuth(token, user) {
@@ -1485,12 +1495,24 @@ async function openSettings() {
 }
 
 async function saveNotesRoot() {
+  const root = $("setNotesRoot").value.trim();
+  $("settingsStatus").textContent = "⏳ 保存中…";
   try {
-    const r = await api("/api/auth/notes-root", "POST",
-                        { notes_root: $("setNotesRoot").value.trim() });
-    showToast(`✅ 学习笔记目录已保存：${r.notes_root || "（系统默认目录）"}`, "success");
-    $("settingsModal").classList.add("hidden");
-    loadProjects();
+    const r = await api("/api/auth/notes-root", "POST", { notes_root: root, create: false });
+    if (r.need_create) {
+      // 目录不存在：确认后自动创建
+      askConfirm(`目录不存在：${r.notes_root}\n\n是否自动创建该目录？`, async () => {
+        const r2 = await api("/api/auth/notes-root", "POST", { notes_root: root, create: true });
+        showToast(`✅ 已创建并保存：${r2.notes_root}`, "success");
+        $("settingsModal").classList.add("hidden");
+        loadProjects();
+      });
+      $("settingsStatus").textContent = "";
+    } else {
+      showToast(`✅ ${r.message || "学习笔记目录已保存"}`, "success");
+      $("settingsModal").classList.add("hidden");
+      loadProjects();
+    }
   } catch (e) {
     $("settingsStatus").textContent = "❌ " + e.message;
   }
@@ -1499,11 +1521,22 @@ async function saveNotesRoot() {
 // ---------------------------------------------------------------------------
 // 管理员后台：LLM 配置 / 邀请码 / 用户管理
 // ---------------------------------------------------------------------------
+const ADMIN_TABS = ["LLM", "Invites", "Users"];
+
+function switchAdminTab(name) {
+  ADMIN_TABS.forEach(t => {
+    $("adminTab" + t).classList.toggle("active", t === name);
+    $("adminPane" + t).classList.toggle("hidden", t !== name);
+  });
+}
+
 function showAdminPanel() {
   $("adminModal").classList.remove("hidden");
+  switchAdminTab("LLM");
   loadAdminLLMStatus();
   loadInvites();
   loadAdminUsers();
+  $("adminLLMForm").classList.add("hidden");
 }
 
 async function loadAdminLLMStatus() {
@@ -1582,14 +1615,21 @@ async function adminFetchModels() {
 }
 
 async function adminTestLLM() {
-  const baseUrl = $("adminBaseUrl").value.trim();
-  const apiKey = $("adminApiKey").value.trim();
-  const model = $("adminModel").value;
-  if (!baseUrl || !model) { $("adminLLMStatus2").textContent = "❌ 请先填好接口地址并选择模型"; return; }
+  // 表单未打开时：用当前已保存配置测试（Key 由服务端提供）
+  let baseUrl = $("adminBaseUrl").value.trim();
+  let model = $("adminModel").value;
+  if (!baseUrl || !model) {
+    try {
+      const cfg = await api("/api/admin/llm-config");
+      baseUrl = cfg.base_url || "";
+      model = cfg.model || "";
+    } catch (e) { /* 读取失败走下方报错 */ }
+  }
+  if (!baseUrl || !model) { $("adminLLMStatus2").textContent = "❌ 请先配置接口地址并选择模型"; return; }
   $("adminLLMStatus2").textContent = "⏳ 正在测试连接…";
   try {
     const r = await api("/api/admin/llm-test", "POST",
-                        { base_url: baseUrl, api_key: apiKey, model: model });
+                        { base_url: baseUrl, api_key: $("adminApiKey").value.trim(), model: model });
     if (r.ok) {
       $("adminLLMStatus2").textContent =
         `✅ 连接成功（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} 模型回复：${r.reply || ""}`;
@@ -1612,10 +1652,24 @@ async function adminSaveLLM() {
     const r = await api("/api/admin/llm-config", "POST", body);
     showToast(`✅ LLM 配置已保存，模型：${r.model}`, "success");
     $("adminApiKey").value = "";
+    $("adminLLMForm").classList.add("hidden");
     loadAdminLLMStatus();
   } catch (e) {
     $("adminLLMStatus2").textContent = "❌ " + e.message;
   }
+}
+
+async function adminClearKey() {
+  askConfirm("确定清除已保存的 API Key？\n\n清除后系统将无法调用 LLM，需重新配置。", async () => {
+  try {
+    await api("/api/admin/llm-config", "POST", { api_key: "" });
+    showToast("🗑 API Key 已清除", "success");
+    $("adminApiKey").value = "";
+    loadAdminLLMStatus();
+  } catch (e) {
+    showToast("清除失败：" + e.message, "error");
+  }
+  });
 }
 
 async function genInvite() {
@@ -1718,11 +1772,19 @@ async function init() {
   $("btnAdminPanel").onclick = () => showAdminPanel();
   $("btnCloseAdmin").onclick = () => $("adminModal").classList.add("hidden");
   $("adminModal").addEventListener("click", (e) => { if (e.target === $("adminModal")) $("adminModal").classList.add("hidden"); });
+  ADMIN_TABS.forEach(t => { $("adminTab" + t).onclick = () => switchAdminTab(t); });
   $("btnGenInvite").onclick = genInvite;
   $("adminProvider").addEventListener("change", onAdminProviderChange);
   $("btnAdminFetchModels").onclick = adminFetchModels;
   $("btnAdminTestLLM").onclick = adminTestLLM;
   $("btnAdminSaveLLM").onclick = adminSaveLLM;
+  $("btnAdminEditLLM").onclick = () => { $("adminLLMForm").classList.remove("hidden"); openAdminLLMEditor(); };
+  $("btnAdminCancelLLM").onclick = () => { $("adminLLMForm").classList.add("hidden"); $("adminLLMStatus2").textContent = ""; };
+  $("btnAdminClearKey").onclick = adminClearKey;
+  // 系统确认弹层
+  $("btnConfirmYes").onclick = () => { $("confirmModal").classList.add("hidden"); if (confirmCb) { const cb = confirmCb; confirmCb = null; cb(); } };
+  $("btnConfirmNo").onclick = () => { $("confirmModal").classList.add("hidden"); confirmCb = null; };
+  $("btnCloseConfirm").onclick = () => { $("confirmModal").classList.add("hidden"); confirmCb = null; };
 
   // ---- 已有 token：验证登录态 ----
   if (authToken) {

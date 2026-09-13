@@ -130,19 +130,20 @@ def get_providers(admin: dict = Depends(require_admin)):
 async def fetch_models(body: ModelsBody, admin: dict = Depends(require_admin)):
     """用给定 base_url + api_key 拉取该服务商真实模型列表（调 /models）。
 
-    Key 只用于本次请求，不做任何存储。失败时返回预置模型表或错误信息。
+    api_key 为空时使用服务端已保存的 Key。Key 不做任何存储。失败时返回预置模型表或错误信息。
     """
     base_url = (body.base_url or "").rstrip("/")
     if not base_url:
         raise HTTPException(status_code=400, detail="接口地址不能为空")
+    api_key = (body.api_key or "").strip() or get_llm_config()["api_key"]
 
     # 先匹配预置服务商，失败时至少能给出候选模型
     preset = next((p for p in PROVIDERS if p["base_url"].rstrip("/") == base_url), None)
     fallback_models = preset["models"] if preset else []
 
     headers = {"Content-Type": "application/json"}
-    if body.api_key:
-        headers["Authorization"] = f"Bearer {body.api_key}"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     client_kwargs = {"timeout": 20}
     proxy = get_http_proxy()
@@ -179,7 +180,7 @@ async def fetch_models(body: ModelsBody, admin: dict = Depends(require_admin)):
 async def test_llm(body: LLMTestBody, admin: dict = Depends(require_admin)):
     """连接测试：用当前填写的地址/Key/模型发一个最小请求，返回延迟与结果。
 
-    Key 只用于本次测试，不做存储。
+    Key 为空时使用服务端已保存的 Key。只用于本次测试，不做存储。
     """
     base_url = (body.base_url or "").rstrip("/")
     model = (body.model or "").strip()
@@ -187,10 +188,11 @@ async def test_llm(body: LLMTestBody, admin: dict = Depends(require_admin)):
         raise HTTPException(status_code=400, detail="接口地址不能为空")
     if not model:
         raise HTTPException(status_code=400, detail="请先选择模型")
+    api_key = (body.api_key or "").strip() or get_llm_config()["api_key"]
 
     headers = {"Content-Type": "application/json"}
-    if body.api_key:
-        headers["Authorization"] = f"Bearer {body.api_key}"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     client_kwargs = {"timeout": 30}
     proxy = get_http_proxy()

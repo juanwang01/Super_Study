@@ -67,6 +67,7 @@ def me(user: dict = Depends(get_current_user)):
 
 class NotesRootBody(BaseModel):
     notes_root: str = ""
+    create: bool = False   # 路径不存在时，用户确认创建
 
 
 @router.get("/notes-root")
@@ -76,9 +77,39 @@ def get_my_notes_root(user: dict = Depends(get_current_user)):
 
 @router.post("/notes-root")
 def set_my_notes_root(body: NotesRootBody, user: dict = Depends(get_current_user)):
-    """设置自己的学习笔记根目录（Obsidian vault 路径；空字符串=清空回到系统目录）。"""
-    set_user_notes_root(user["id"], body.notes_root.strip())
-    return {"saved": True, "notes_root": body.notes_root.strip()}
+    """设置自己的学习笔记根目录（Obsidian vault 路径；空字符串=清空回到系统目录）。
+
+    校验：必须是本地绝对路径；路径不存在时返回 need_create（前端确认后再以 create=true 提交）。
+    """
+    import re
+    from pathlib import Path
+
+    root = (body.notes_root or "").strip()
+    if not root:
+        set_user_notes_root(user["id"], "")
+        return {"saved": True, "notes_root": "", "message": "已清空，笔记回到系统目录"}
+
+    # 绝对路径校验（Windows 盘符或 UNC；预留 Linux/macOS）
+    if not (re.match(r"^[A-Za-z]:[\\/]", root) or root.startswith("\\\\")
+            or root.startswith("/")):
+        raise HTTPException(status_code=400,
+                            detail="请输入本地绝对路径，如 D:\\vault\\学习笔记（或 /home/user/notes）")
+
+    p = Path(root)
+    if not p.exists():
+        if body.create:
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                raise HTTPException(status_code=400, detail=f"创建目录失败：{e}")
+        else:
+            return {"need_create": True, "notes_root": root,
+                    "message": "该目录不存在，是否自动创建？"}
+    elif not p.is_dir():
+        raise HTTPException(status_code=400, detail="该路径已存在，但它不是文件夹")
+
+    set_user_notes_root(user["id"], root)
+    return {"saved": True, "notes_root": root, "message": "已保存，Obsidian 可直接打开"}
 
 
 @router.post("/change-password")
