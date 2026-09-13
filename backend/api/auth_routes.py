@@ -5,11 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from auth import (create_invites, create_user, create_token, delete_invite,
-                  get_current_user, get_usage, get_user, list_invites, list_users,
-                  require_admin, set_user_disabled, validate_invite, verify_password)
+                  get_current_user, get_usage, get_user, get_user_by_name,
+                  get_user_notes_root, list_invites, list_users, require_admin,
+                  set_user_disabled, set_user_notes_root, validate_invite,
+                  verify_password)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
 
 class RegisterBody(BaseModel):
     invite_code: str
@@ -47,7 +48,7 @@ def register(body: RegisterBody):
 
 @router.post("/login")
 def login(body: LoginBody):
-    user = get_user_by_username(body.username.strip())
+    user = get_user_by_name(body.username.strip())
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     if user.get("disabled"):
@@ -57,16 +58,27 @@ def login(body: LoginBody):
             "token": create_token(user["id"])}
 
 
-def get_user_by_username(username: str):
-    from auth import get_user_by_name
-    return get_user_by_name(username)
-
-
 @router.get("/me")
 def me(user: dict = Depends(get_current_user)):
     u = get_user(user["id"]) or {}
     return {"id": u["id"], "username": u["username"], "role": u["role"],
             "notes_root": u.get("notes_root") or ""}
+
+
+class NotesRootBody(BaseModel):
+    notes_root: str = ""
+
+
+@router.get("/notes-root")
+def get_my_notes_root(user: dict = Depends(get_current_user)):
+    return {"notes_root": get_user_notes_root(user["id"])}
+
+
+@router.post("/notes-root")
+def set_my_notes_root(body: NotesRootBody, user: dict = Depends(get_current_user)):
+    """设置自己的学习笔记根目录（Obsidian vault 路径；空字符串=清空回到系统目录）。"""
+    set_user_notes_root(user["id"], body.notes_root.strip())
+    return {"saved": True, "notes_root": body.notes_root.strip()}
 
 
 @router.post("/change-password")

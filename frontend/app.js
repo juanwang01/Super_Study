@@ -9,6 +9,11 @@ let currentFile = null;      // {kind, name} 当前打开的文件
 let vditor = null;           // Vditor 编辑器实例
 let projectNotesRoot = "";   // 当前项目笔记目录绝对路径（Obsidian vault 子目录）
 
+// 用户系统
+let authToken = localStorage.getItem("learn_token") || "";
+let currentUser = null;      // {id, username, role, notes_root}
+let providersCache = [];     // 服务商预设缓存（管理员）
+
 const $ = (id) => document.getElementById(id);
 
 // ---------------------------------------------------------------------------
@@ -90,10 +95,70 @@ function inlineMd(s) {
 // ---------------------------------------------------------------------------
 async function api(path, method = "GET", body = null) {
   const opt = { method, headers: { "Content-Type": "application/json" } };
+  if (authToken) opt.headers["Authorization"] = "Bearer " + authToken;
   if (body) opt.body = JSON.stringify(body);
   const resp = await fetch(path, opt);
+  if (resp.status === 401 && !path.startsWith("/api/auth/")) {
+    // 登录态失效 → 清空并回登录页
+    logout(false);
+    throw new Error("登录已过期，请重新登录");
+  }
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) throw new Error(data.detail || `请求失败 (${resp.status})`);
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// 用户认证：登录 / 注册 / 登出 / 视图切换
+// ---------------------------------------------------------------------------
+function setAuth(token, user) {
+  authToken = token;
+  currentUser = user;
+  if (token) localStorage.setItem("learn_token", token);
+  else localStorage.removeItem("learn_token");
+}
+
+function showAuthView() {
+  $("authView").classList.remove("hidden");
+  $("mainMenu").classList.add("hidden");
+  $("projectView").classList.add("hidden");
+}
+
+async function showMainMenu() {
+  currentProject = null;
+  currentFile = null;
+  destroyEditor();
+  $("authView").classList.add("hidden");
+  $("mainMenu").classList.remove("hidden");
+  $("projectView").classList.add("hidden");
+  $("userName").textContent = currentUser ? currentUser.username : "—";
+  const badge = $("userBadge");
+  badge.textContent = currentUser && currentUser.role === "admin" ? "管理员" : "用户";
+  badge.className = "badge" + (currentUser && currentUser.role === "admin" ? " badge-admin" : "");
+  $("btnAdminPanel").classList.toggle("hidden", !(currentUser && currentUser.role === "admin"));
+  loadProjects();
+}
+
+function logout(notify = true) {
+  setAuth("", null);
+  if (sessionId) { try { api(`/api/session/${sessionId}/close`, "POST"); } catch (e) { /* 忽略 */ } }
+  sessionId = null;
+  if (notify) showToast("已退出登录", "success");
+  showAuthView();
+}
+
+async function doLogin(username, password) {
+  const data = await api("/api/auth/login", "POST", { username, password });
+  setAuth(data.token, data);
+  showMainMenu();
+  return data;
+}
+
+async function doRegister(inviteCode, username, password) {
+  const data = await api("/api/auth/register", "POST",
+                         { invite_code: inviteCode, username, password });
+  setAuth(data.token, data);
+  showMainMenu();
   return data;
 }
 
@@ -111,16 +176,8 @@ function showToast(text, type = "") {
 }
 
 // ---------------------------------------------------------------------------
-// 视图切换
+// 视图切换（showMainMenu 定义在用户认证区段，合并了项目清理逻辑）
 // ---------------------------------------------------------------------------
-function showMainMenu() {
-  currentProject = null;
-  currentFile = null;
-  destroyEditor();
-  $("mainMenu").classList.remove("hidden");
-  $("projectView").classList.add("hidden");
-  loadProjects();
-}
 
 async function showProject(project) {
   currentProject = project;
@@ -608,8 +665,8 @@ function addMsg(role, text, toolInfo) {
 async function loadProjects() {
   // 刷新笔记目录状态（主菜单卡片）
   try {
-    const nc = await api("/api/admin/notes-config");
-    $("notesStatus").textContent = nc.configured
+    const nc = await api("/api/auth/notes-root");
+    $("notesStatus").textContent = nc.notes_root
       ? `📁 当前：${nc.notes_root}（Obsidian 直接打开即可）`
       : "📁 当前：未配置（笔记保存在系统 data 目录）";
   } catch (e) {
@@ -1400,10 +1457,7 @@ function toolSummary(data) {
 // ---------------------------------------------------------------------------
 // 系统设置
 // ---------------------------------------------------------------------------
-let providersCache = [];
-
-function fillModels(models, keepValue) {
-  const sel = $("setModel");
+function fillModels(sel, models, keepValue) {
   const prev = sel.value;
   sel.innerHTML = "";
   (models || []).forEach(m => {
@@ -1416,46 +1470,13 @@ function fillModels(models, keepValue) {
   else if (sel.options.length) sel.value = sel.options[0].value;
 }
 
+// ---------------------------------------------------------------------------
+// 设置（每用户：仅学习笔记目录）
+// ---------------------------------------------------------------------------
 async function openSettings() {
   try {
-    if (!providersCache.length) {
-      const data = await api("/api/admin/llm-providers");
-      providersCache = data.providers || [];
-      const sel = $("setProvider");
-      sel.innerHTML = "";
-      providersCache.forEach(p => {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = p.name;
-        sel.appendChild(opt);
-      });
-      const custom = document.createElement("option");
-      custom.value = "custom";
-      custom.textContent = "自定义（手动填写地址和模型）";
-      sel.appendChild(custom);
-    }
-
-    const cfg = await api("/api/admin/llm-config");
-    const curUrl = cfg.base_url || "";
-    const matched = providersCache.find(p => p.base_url === curUrl);
-    $("setProvider").value = matched ? matched.id : "custom";
-    onProviderChange();
-
-    $("setBaseUrl").value = curUrl;
-    $("setTimeout").value = cfg.timeout || "180";
-    $("setApiKey").value = "";
-    $("setApiKey").placeholder = cfg.api_key.configured
-      ? `已配置（${cfg.api_key.masked}），留空不修改`
-      : "输入你的 API Key";
-    if (cfg.model) fillModels([cfg.model], false);
-    else if (matched) fillModels(matched.models, false);
-
-    // 笔记根目录
-    try {
-      const nc = await api("/api/admin/notes-config");
-      $("setNotesRoot").value = nc.notes_root || "";
-    } catch (e) { $("setNotesRoot").value = ""; }
-
+    const nc = await api("/api/auth/notes-root");
+    $("setNotesRoot").value = nc.notes_root || "";
     $("settingsStatus").textContent = "";
     $("settingsModal").classList.remove("hidden");
   } catch (e) {
@@ -1463,77 +1484,203 @@ async function openSettings() {
   }
 }
 
-function onProviderChange() {
-  const pid = $("setProvider").value;
-  const p = providersCache.find(x => x.id === pid);
-  if (p) {
-    $("setBaseUrl").value = p.base_url;
-    fillModels(p.models, false);
-    $("settingsHint").textContent = "💡 " + p.hint;
-  } else {
-    $("settingsHint").textContent = "⚠️ 此设置仅允许本机（localhost）访问修改，防止 API Key 被远程篡改。";
-  }
-}
-
-async function fetchModels() {
-  const baseUrl = $("setBaseUrl").value.trim();
-  const apiKey = $("setApiKey").value.trim();
-  if (!baseUrl) { $("settingsStatus").textContent = "❌ 请先填写接口地址"; return; }
-  $("settingsStatus").textContent = "⏳ 正在拉取模型列表…";
+async function saveNotesRoot() {
   try {
-    const r = await api("/api/admin/llm-models", "POST", { base_url: baseUrl, api_key: apiKey });
-    if (r.models && r.models.length) {
-      fillModels(r.models, true);
-      $("settingsStatus").textContent = `✅ 已获取 ${r.models.length} 个模型${r.error ? "（" + r.error + "）" : ""}`;
-    } else {
-      $("settingsStatus").textContent = "⚠️ " + (r.error || "未获取到模型");
-    }
+    const r = await api("/api/auth/notes-root", "POST",
+                        { notes_root: $("setNotesRoot").value.trim() });
+    showToast(`✅ 学习笔记目录已保存：${r.notes_root || "（系统默认目录）"}`, "success");
+    $("settingsModal").classList.add("hidden");
+    loadProjects();
   } catch (e) {
     $("settingsStatus").textContent = "❌ " + e.message;
   }
 }
 
-async function testLLM() {
-  const baseUrl = $("setBaseUrl").value.trim();
-  const apiKey = $("setApiKey").value.trim();
-  const model = $("setModel").value;
-  if (!baseUrl || !model) {
-    $("settingsStatus").textContent = "❌ 请先填好接口地址并选择模型";
-    return;
+// ---------------------------------------------------------------------------
+// 管理员后台：LLM 配置 / 邀请码 / 用户管理
+// ---------------------------------------------------------------------------
+function showAdminPanel() {
+  $("adminModal").classList.remove("hidden");
+  loadAdminLLMStatus();
+  loadInvites();
+  loadAdminUsers();
+}
+
+async function loadAdminLLMStatus() {
+  try {
+    const cfg = await api("/api/admin/llm-config");
+    $("adminLLMStatus").textContent =
+      `接口：${cfg.base_url || "未配置"} ｜ 模型：${cfg.model || "—"} ｜ ` +
+      (cfg.api_key.configured ? `Key：${cfg.api_key.masked}` : "Key：未配置");
+  } catch (e) {
+    $("adminLLMStatus").textContent = "读取失败：" + e.message;
   }
-  $("settingsStatus").textContent = "⏳ 正在测试连接…";
+}
+
+async function loadProviders() {
+  if (providersCache.length) return;
+  const data = await api("/api/admin/llm-providers");
+  providersCache = data.providers || [];
+  const sel = $("adminProvider");
+  sel.innerHTML = "";
+  providersCache.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  const custom = document.createElement("option");
+  custom.value = "custom";
+  custom.textContent = "自定义（手动填写地址和模型）";
+  sel.appendChild(custom);
+}
+
+async function openAdminLLMEditor() {
+  try {
+    await loadProviders();
+    const cfg = await api("/api/admin/llm-config");
+    const curUrl = cfg.base_url || "";
+    const matched = providersCache.find(p => p.base_url === curUrl);
+    $("adminProvider").value = matched ? matched.id : "custom";
+    onAdminProviderChange();
+    $("adminBaseUrl").value = curUrl;
+    $("adminTimeout").value = cfg.timeout || "180";
+    $("adminApiKey").value = "";
+    $("adminApiKey").placeholder = cfg.api_key.configured
+      ? `已配置（${cfg.api_key.masked}），留空不修改`
+      : "输入 API Key";
+    if (cfg.model) fillModels($("adminModel"), [cfg.model], false);
+    else if (matched) fillModels($("adminModel"), matched.models, false);
+    $("adminLLMStatus2").textContent = "";
+  } catch (e) {
+    alert("读取配置失败：" + e.message);
+  }
+}
+
+function onAdminProviderChange() {
+  const pid = $("adminProvider").value;
+  const p = providersCache.find(x => x.id === pid);
+  if (p) $("adminBaseUrl").value = p.base_url;
+}
+
+async function adminFetchModels() {
+  const baseUrl = $("adminBaseUrl").value.trim();
+  const apiKey = $("adminApiKey").value.trim();
+  if (!baseUrl) { $("adminLLMStatus2").textContent = "❌ 请先填写接口地址"; return; }
+  $("adminLLMStatus2").textContent = "⏳ 正在拉取模型列表…";
+  try {
+    const r = await api("/api/admin/llm-models", "POST", { base_url: baseUrl, api_key: apiKey });
+    if (r.models && r.models.length) {
+      fillModels($("adminModel"), r.models, true);
+      $("adminLLMStatus2").textContent = `✅ 已获取 ${r.models.length} 个模型${r.error ? "（" + r.error + "）" : ""}`;
+    } else {
+      $("adminLLMStatus2").textContent = "⚠️ " + (r.error || "未获取到模型");
+    }
+  } catch (e) {
+    $("adminLLMStatus2").textContent = "❌ " + e.message;
+  }
+}
+
+async function adminTestLLM() {
+  const baseUrl = $("adminBaseUrl").value.trim();
+  const apiKey = $("adminApiKey").value.trim();
+  const model = $("adminModel").value;
+  if (!baseUrl || !model) { $("adminLLMStatus2").textContent = "❌ 请先填好接口地址并选择模型"; return; }
+  $("adminLLMStatus2").textContent = "⏳ 正在测试连接…";
   try {
     const r = await api("/api/admin/llm-test", "POST",
                         { base_url: baseUrl, api_key: apiKey, model: model });
     if (r.ok) {
-      $("settingsStatus").textContent =
+      $("adminLLMStatus2").textContent =
         `✅ 连接成功（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} 模型回复：${r.reply || ""}`;
     } else {
-      $("settingsStatus").textContent = `❌ 测试失败（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} ${r.error || ""}`;
+      $("adminLLMStatus2").textContent = `❌ 测试失败（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} ${r.error || ""}`;
     }
   } catch (e) {
-    $("settingsStatus").textContent = "❌ " + e.message;
+    $("adminLLMStatus2").textContent = "❌ " + e.message;
   }
 }
 
-async function saveSettings() {
+async function adminSaveLLM() {
   const body = {
-    base_url: $("setBaseUrl").value.trim() || null,
-    model: $("setModel").value || null,
-    timeout: $("setTimeout").value.trim() || null,
-    api_key: $("setApiKey").value.trim() || null,
+    base_url: $("adminBaseUrl").value.trim() || null,
+    model: $("adminModel").value || null,
+    timeout: $("adminTimeout").value.trim() || null,
+    api_key: $("adminApiKey").value.trim() || null,
   };
   try {
     const r = await api("/api/admin/llm-config", "POST", body);
-    // 笔记根目录（独立保存，避免互相覆盖）
-    try {
-      await api("/api/admin/notes-config", "POST", { notes_root: $("setNotesRoot").value.trim() || null });
-    } catch (e) { /* 笔记根目录失败不阻断 LLM 保存 */ }
-    showToast(`✅ 配置已保存，模型：${r.model}`, "success");
-    $("settingsModal").classList.add("hidden");
-    $("setApiKey").value = "";
+    showToast(`✅ LLM 配置已保存，模型：${r.model}`, "success");
+    $("adminApiKey").value = "";
+    loadAdminLLMStatus();
   } catch (e) {
-    $("settingsStatus").textContent = "❌ " + e.message;
+    $("adminLLMStatus2").textContent = "❌ " + e.message;
+  }
+}
+
+async function genInvite() {
+  $("inviteStatus").textContent = "⏳ 生成中…";
+  try {
+    const r = await api("/api/auth/invites", "POST", { count: 1 });
+    $("inviteStatus").textContent = "";
+    showToast(`✅ 邀请码：${r.codes[0]}（复制发给朋友）`, "success");
+    loadInvites();
+  } catch (e) {
+    $("inviteStatus").textContent = "❌ " + e.message;
+  }
+}
+
+async function loadInvites() {
+  try {
+    const r = await api("/api/auth/invites");
+    const box = $("inviteList");
+    const list = (r.invites || []).filter(i => !i.used);
+    if (!list.length) { box.innerHTML = '<p class="hint">暂无未使用的邀请码</p>'; return; }
+    box.innerHTML = "";
+    list.forEach(i => {
+      const row = document.createElement("div");
+      row.className = "invite-row";
+      row.innerHTML = `<code>${escapeHtml(i.code)}</code><span class="hint">创建于 ${new Date(i.created_at * 1000).toLocaleDateString()}</span>
+        <button class="mini-btn danger-btn" data-code="${escapeHtml(i.code)}">删除</button>`;
+      row.querySelector("button").onclick = async () => {
+        try { await api(`/api/auth/invites/${encodeURIComponent(i.code)}`, "DELETE"); loadInvites(); }
+        catch (e) { showToast("删除失败：" + e.message, "error"); }
+      };
+      box.appendChild(row);
+    });
+  } catch (e) {
+    $("inviteList").innerHTML = '<p class="hint">加载失败</p>';
+  }
+}
+
+async function loadAdminUsers() {
+  try {
+    const r = await api("/api/auth/users");
+    const box = $("adminUserList");
+    if (!r.users || !r.users.length) { box.innerHTML = '<p class="hint">暂无用户</p>'; return; }
+    box.innerHTML = "";
+    r.users.forEach(u => {
+      const row = document.createElement("div");
+      row.className = "invite-row";
+      const badge = u.role === "admin" ? "管理员" : (u.disabled ? "已禁用" : "用户");
+      row.innerHTML = `<span><b>${escapeHtml(u.username)}</b> <span class="badge">${badge}</span>
+        <span class="hint">项目：${u.project_count || 0}</span></span>`;
+      if (u.role !== "admin") {
+        const btn = document.createElement("button");
+        btn.className = "mini-btn " + (u.disabled ? "" : "danger-btn");
+        btn.textContent = u.disabled ? "启用" : "禁用";
+        btn.onclick = async () => {
+          try {
+            await api(`/api/auth/users/${u.id}/${u.disabled ? "enable" : "disable"}`, "POST");
+            loadAdminUsers();
+          } catch (e) { showToast(e.message, "error"); }
+        };
+        row.appendChild(btn);
+      }
+      box.appendChild(row);
+    });
+  } catch (e) {
+    $("adminUserList").innerHTML = '<p class="hint">加载失败</p>';
   }
 }
 
@@ -1541,6 +1688,59 @@ async function saveSettings() {
 // 初始化
 // ---------------------------------------------------------------------------
 async function init() {
+  // ---- 认证流 ----
+  $("btnLogin").onclick = async () => {
+    const u = $("loginUser").value.trim(), p = $("loginPass").value;
+    if (!u || !p) { $("authStatus").textContent = "请输入用户名和密码"; return; }
+    $("authStatus").textContent = "⏳ 登录中…";
+    try { await doLogin(u, p); $("authStatus").textContent = ""; }
+    catch (e) { $("authStatus").textContent = "❌ " + e.message; }
+  };
+  $("loginPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btnLogin").click(); });
+  $("btnGoRegister").onclick = () => {
+    $("authLoginPane").classList.add("hidden");
+    $("authRegisterPane").classList.remove("hidden");
+    $("authStatus").textContent = "";
+  };
+  $("btnGoLogin").onclick = () => {
+    $("authRegisterPane").classList.add("hidden");
+    $("authLoginPane").classList.remove("hidden");
+    $("authStatus").textContent = "";
+  };
+  $("btnRegister").onclick = async () => {
+    const code = $("regInvite").value.trim(), u = $("regUser").value.trim(), p = $("regPass").value;
+    if (!code || !u || !p) { $("authStatus").textContent = "请填写邀请码、用户名和密码"; return; }
+    $("authStatus").textContent = "⏳ 注册中…";
+    try { await doRegister(code, u, p); $("authStatus").textContent = ""; }
+    catch (e) { $("authStatus").textContent = "❌ " + e.message; }
+  };
+  $("btnLogout").onclick = () => logout();
+  $("btnAdminPanel").onclick = () => showAdminPanel();
+  $("btnCloseAdmin").onclick = () => $("adminModal").classList.add("hidden");
+  $("adminModal").addEventListener("click", (e) => { if (e.target === $("adminModal")) $("adminModal").classList.add("hidden"); });
+  $("btnGenInvite").onclick = genInvite;
+  $("adminProvider").addEventListener("change", onAdminProviderChange);
+  $("btnAdminFetchModels").onclick = adminFetchModels;
+  $("btnAdminTestLLM").onclick = adminTestLLM;
+  $("btnAdminSaveLLM").onclick = adminSaveLLM;
+
+  // ---- 已有 token：验证登录态 ----
+  if (authToken) {
+    try {
+      const me = await api("/api/auth/me");
+      currentUser = me;
+      showMainMenu();
+    } catch (e) {
+      setAuth("", null);
+      showAuthView();
+      return;
+    }
+  } else {
+    showAuthView();
+    return;
+  }
+
+  // ---- 会话（进入主菜单后建立会话） ----
   try {
     const data = await api("/api/session", "POST");
     sessionId = data.session_id;
@@ -1551,9 +1751,8 @@ async function init() {
   bindTopbar();
   bindFileInputs();
   bindDragDrop();
-  showMainMenu();
 
-  // 设置弹层
+  // 设置弹层（每用户：仅笔记目录）
   $("btnCloseSettings").onclick = () => $("settingsModal").classList.add("hidden");
   $("settingsModal").addEventListener("click", (e) => { if (e.target === $("settingsModal")) $("settingsModal").classList.add("hidden"); });
   $("btnSettings").onclick = openSettings;
@@ -1566,10 +1765,7 @@ async function init() {
       }, 150);
     });
   };
-  $("btnSaveSettings").onclick = saveSettings;
-  $("btnFetchModels").onclick = fetchModels;
-  $("btnTestLLM").onclick = testLLM;
-  $("setProvider").addEventListener("change", onProviderChange);
+  $("btnSaveNotesRoot").onclick = saveNotesRoot;
 
   $("btnCreateProject").onclick = () => {
     const name = $("newProjectName").value.trim();

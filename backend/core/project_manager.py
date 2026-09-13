@@ -238,12 +238,12 @@ def create_project(project_name: str, description: str = "", owner: str = "admin
 def _notes_dir(project_id: str) -> Path:
     """返回项目学习笔记目录。
 
-    - 配置了笔记根（LEARN_NOTES_ROOT，Obsidian vault 路径）→ {根}/{项目名}/
-    - 未配置 → 项目文件夹根（旧行为）
+    优先级：项目 owner 在 users 表配置的 notes_root（Obsidian vault）→ 全局
+    LEARN_NOTES_ROOT（.env）→ 项目文件夹根（旧行为）。
     """
     from config import get_notes_root
     pdir = _project_dir(project_id)
-    root = get_notes_root()
+    root = _user_notes_root(project_id) or get_notes_root()
     if root:
         meta = _load_yaml(pdir / CONFIG_DIR_NAME / META_FILE)
         proj_name = meta.get("project_name") or pdir.name
@@ -251,6 +251,16 @@ def _notes_dir(project_id: str) -> Path:
         d.mkdir(parents=True, exist_ok=True)
         return d
     return pdir
+
+
+def _user_notes_root(project_id: str) -> str:
+    """按项目归属用户在 users 表查询其自定义笔记根目录。"""
+    try:
+        owner = _owner_of(project_id)
+        import auth
+        return auth.get_user_notes_root(owner)
+    except Exception:
+        return ""
 
 
 def migrate_notes(project_id: str) -> None:

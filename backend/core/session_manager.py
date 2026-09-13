@@ -18,8 +18,9 @@ from core import project_threads as pt
 
 
 class Session:
-    def __init__(self, session_id: str) -> None:
+    def __init__(self, session_id: str, owner: str = "") -> None:
         self.session_id = session_id
+        self.owner = owner                        # 会话归属用户 id（数据隔离）
         self.project_id: str | None = None          # 当前绑定的项目
         self.project_name: str = ""
         self.mode: str = "general"                  # document_anchor | general
@@ -44,9 +45,9 @@ class SessionManager:
         self._lock = threading.Lock()
         self._idle_seconds = idle_seconds
 
-    def create_session(self) -> Session:
+    def create_session(self, user_id: str = "") -> Session:
         sid = uuid.uuid4().hex
-        s = Session(sid)
+        s = Session(sid, owner=user_id)
         with self._lock:
             self._sessions[sid] = s
         return s

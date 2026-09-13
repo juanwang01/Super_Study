@@ -1,14 +1,22 @@
 """项目相关 API：列表 / 新建 / 详情 / 笔记 / 计划 / 素材 / 删除。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
+from auth import get_current_user
 from core import project_manager as pm
 from core import material_preprocess as pre
 from core import material_search as ms
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+def _check_owner(project_id: str, user: dict) -> None:
+    """项目归属校验：admin 可访问全部，普通用户仅能访问自己的项目。"""
+    owner = pm._owner_of(project_id)
+    if user.get("role") != "admin" and owner != user.get("id"):
+        raise HTTPException(status_code=403, detail="无权访问该项目")
+
 
 
 class CreateProjectBody(BaseModel):
@@ -51,20 +59,22 @@ class ImportUrlBody(BaseModel):
 
 
 @router.get("")
-def list_projects():
-    return {"projects": pm.list_projects()}
+def list_projects(user: dict = Depends(get_current_user)):
+    owner = "" if user.get("role") == "admin" else user.get("id")
+    return {"projects": pm.list_projects(owner=owner)}
 
 
 @router.post("")
-def create_project(body: CreateProjectBody):
+def create_project(body: CreateProjectBody, user: dict = Depends(get_current_user)):
     try:
-        return pm.create_project(body.project_name, body.description)
+        return pm.create_project(body.project_name, body.description, owner=user.get("id"))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/{project_id}")
-def get_project(project_id: str):
+def get_project(project_id: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return pm.load_project(project_id)
     except (ValueError, FileNotFoundError) as e:
@@ -72,7 +82,8 @@ def get_project(project_id: str):
 
 
 @router.get("/{project_id}/notes")
-def get_notes(project_id: str):
+def get_notes(project_id: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         pdir = pm._project_dir(project_id)
         notes_dir = pm._notes_dir(project_id)
@@ -88,7 +99,8 @@ def get_notes(project_id: str):
 
 
 @router.get("/{project_id}/plan")
-def get_plan(project_id: str):
+def get_plan(project_id: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return {
             "versions": pm.list_plan_versions(project_id),
@@ -99,8 +111,9 @@ def get_plan(project_id: str):
 
 
 @router.get("/{project_id}/plan/{file_name}")
-def get_plan_version(project_id: str, file_name: str):
+def get_plan_version(project_id: str, file_name: str, user: dict = Depends(get_current_user)):
     """读取指定计划文件内容（plan_latest.md 或历史版本 plan_vN.md）。"""
+    _check_owner(project_id, user)
     try:
         content = pm.read_plan_file(project_id, file_name)
         return {"name": file_name, "content": content}
@@ -109,7 +122,8 @@ def get_plan_version(project_id: str, file_name: str):
 
 
 @router.get("/{project_id}/materials")
-def get_materials(project_id: str):
+def get_materials(project_id: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         ctx = pm.load_project(project_id)
         return {"materials": ctx["materials"]}
@@ -118,7 +132,8 @@ def get_materials(project_id: str):
 
 
 @router.get("/{project_id}/materials/{material_name}")
-def get_material(project_id: str, material_name: str):
+def get_material(project_id: str, material_name: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         pdir = pm._project_dir(project_id)
         src = pdir / pm.CONFIG_DIR_NAME / pm.SOURCE_DIR
@@ -132,7 +147,8 @@ def get_material(project_id: str, material_name: str):
 
 
 @router.post("/{project_id}/upload", summary="上传原始材料并预处理为 Markdown")
-async def upload_material(project_id: str, file: UploadFile = File(...)):
+async def upload_material(project_id: str, file: UploadFile = File(...),
+                          user: dict = Depends(get_current_user)):
     """上传任意可处理文件（EPUB/PDF/DOCX/TXT/MD/HTML/PPTX/XLSX…），
     自动转换为 Markdown；扫描版 PDF 走 OCR；超长文档自动拆分。
 
@@ -140,6 +156,7 @@ async def upload_material(project_id: str, file: UploadFile = File(...)):
     - 预处理成功 → Markdown 进 source_material/（AI 可用），原始文件副本进 _源文件/
     - 预处理失败 → 原始文件进 _无法处理/（保留待重试或删除），不阻塞导入
     """
+    _check_owner(project_id, user)
     import tempfile
     from pathlib import Path
 
@@ -211,8 +228,9 @@ async def upload_material(project_id: str, file: UploadFile = File(...)):
 
 
 @router.get("/{project_id}/raw-files")
-def list_raw_files(project_id: str, kind: str = "source"):
+def list_raw_files(project_id: str, kind: str = "source", user: dict = Depends(get_current_user)):
     """列出素材子目录文件。kind = source（源文件） | quarantine（无法处理）。"""
+    _check_owner(project_id, user)
     if kind not in ("source", "quarantine"):
         raise HTTPException(status_code=400, detail="kind 仅支持 source / quarantine")
     try:
@@ -222,8 +240,9 @@ def list_raw_files(project_id: str, kind: str = "source"):
 
 
 @router.delete("/{project_id}/raw-files/{kind}/{name}")
-def delete_raw_file(project_id: str, kind: str, name: str):
+def delete_raw_file(project_id: str, kind: str, name: str, user: dict = Depends(get_current_user)):
     """删除素材子目录文件（进回收站，可恢复）。"""
+    _check_owner(project_id, user)
     if kind not in ("source", "quarantine"):
         raise HTTPException(status_code=400, detail="kind 仅支持 source / quarantine")
     try:
@@ -233,8 +252,9 @@ def delete_raw_file(project_id: str, kind: str, name: str):
 
 
 @router.post("/{project_id}/raw-files/quarantine/{name}/reprocess")
-def reprocess_quarantine(project_id: str, name: str):
+def reprocess_quarantine(project_id: str, name: str, user: dict = Depends(get_current_user)):
     """重新预处理「无法处理」目录中的文件：成功则转为素材并从子目录移除。"""
+    _check_owner(project_id, user)
     try:
         path = pm.read_raw_file(project_id, "quarantine", name)
         md_text, warnings = pre.convert_to_markdown(path)
@@ -257,7 +277,8 @@ def reprocess_quarantine(project_id: str, name: str):
 
 
 @router.post("/{project_id}/materials")
-def add_material(project_id: str, body: AddMaterialBody):
+def add_material(project_id: str, body: AddMaterialBody, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return pm.add_material(project_id, body.filename, body.content, body.role)
     except ValueError as e:
@@ -287,13 +308,14 @@ def _parse_llm_json(content: str) -> list:
 
 
 @router.post("/{project_id}/guide-material")
-def guide_material(project_id: str):
+def guide_material(project_id: str, user: dict = Depends(get_current_user)):
     """进入项目引导时的准备分析：AI 先分析当前状态与资料缺口，再搜索推荐。
 
     返回 {"need_material", "gap", "reason", "recommendations", "analysis_text"}
     analysis_text 为面向用户的准备分析（状态摘要 + 资料结论 + 下一步引导），
     前端作为 AI 进入项目后的第一条消息显示。
     """
+    _check_owner(project_id, user)
     from core.agent_bridge import _chat_completion
     ctx = pm.load_project(project_id)
     meta = ctx["meta"]
@@ -419,8 +441,9 @@ def guide_material(project_id: str):
             "reason": judge_reason or "建议按缺口补充资料",
             "recommendations": recs, "analysis_text": analysis}
 @router.post("/{project_id}/search-materials")
-def search_materials(project_id: str, body: SearchBody):
+def search_materials(project_id: str, body: SearchBody, user: dict = Depends(get_current_user)):
     """按主题搜索可用学习材料（维基教科书 + 维基百科）。"""
+    _check_owner(project_id, user)
     query = (body.query or "").strip()
     if not query:
         raise HTTPException(status_code=400, detail="请输入搜索主题")
@@ -432,8 +455,9 @@ def search_materials(project_id: str, body: SearchBody):
 
 
 @router.post("/{project_id}/import-search")
-def import_search(project_id: str, body: ImportSearchBody):
+def import_search(project_id: str, body: ImportSearchBody, user: dict = Depends(get_current_user)):
     """导入维基搜索结果的条目：抓取正文 → 转 Markdown → 存为素材。"""
+    _check_owner(project_id, user)
     title = (body.title or "").strip()
     if not title:
         raise HTTPException(status_code=400, detail="缺少条目标题")
@@ -456,8 +480,9 @@ def import_search(project_id: str, body: ImportSearchBody):
 
 
 @router.post("/{project_id}/import-url")
-def import_url(project_id: str, body: ImportUrlBody):
+def import_url(project_id: str, body: ImportUrlBody, user: dict = Depends(get_current_user)):
     """下载任意资料链接（网页/PDF/EPUB/DOCX…）→ 预处理 → 存为素材。"""
+    _check_owner(project_id, user)
     import tempfile
     from pathlib import Path
 
@@ -503,7 +528,8 @@ def import_url(project_id: str, body: ImportUrlBody):
 
 
 @router.get("/{project_id}/snapshot")
-def get_snapshot(project_id: str):
+def get_snapshot(project_id: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         ctx = pm.load_project(project_id)
         return {"learner_state": ctx["learner_state"], "meta": ctx["snapshot_meta"]}
@@ -512,7 +538,8 @@ def get_snapshot(project_id: str):
 
 
 @router.get("/{project_id}/log")
-def get_log(project_id: str):
+def get_log(project_id: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return {"log": pm.read_log(project_id)}
     except (ValueError, FileNotFoundError) as e:
@@ -520,7 +547,8 @@ def get_log(project_id: str):
 
 
 @router.delete("/{project_id}")
-def delete_project(project_id: str):
+def delete_project(project_id: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return pm.delete_project(project_id)
     except (ValueError, FileNotFoundError) as e:
@@ -531,7 +559,8 @@ def delete_project(project_id: str):
 # md 文件增删改（material / note / plan）
 # ---------------------------------------------------------------------------
 @router.put("/{project_id}/files/{kind}/{name}")
-def update_file(project_id: str, kind: str, name: str, body: FileUpdateBody):
+def update_file(project_id: str, kind: str, name: str, body: FileUpdateBody, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return pm.update_file(project_id, kind, name, body.content)
     except (ValueError, FileNotFoundError) as e:
@@ -540,7 +569,8 @@ def update_file(project_id: str, kind: str, name: str, body: FileUpdateBody):
 
 
 @router.post("/{project_id}/files/{kind}")
-def create_file(project_id: str, kind: str, body: FileCreateBody):
+def create_file(project_id: str, kind: str, body: FileCreateBody, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         if kind == "note":
             return pm.create_note(project_id, body.name, body.content)
@@ -552,7 +582,8 @@ def create_file(project_id: str, kind: str, body: FileCreateBody):
 
 
 @router.delete("/{project_id}/files/{kind}/{name}")
-def delete_file(project_id: str, kind: str, name: str):
+def delete_file(project_id: str, kind: str, name: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return pm.delete_file(project_id, kind, name)
     except (ValueError, FileNotFoundError) as e:
@@ -564,7 +595,8 @@ def delete_file(project_id: str, kind: str, name: str):
 # 回收站（防误删）
 # ---------------------------------------------------------------------------
 @router.get("/{project_id}/trash")
-def list_trash(project_id: str):
+def list_trash(project_id: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return {"items": pm.list_trash(project_id)}
     except FileNotFoundError as e:
@@ -572,7 +604,8 @@ def list_trash(project_id: str):
 
 
 @router.post("/{project_id}/trash/{trash_name}/restore")
-def restore_file(project_id: str, trash_name: str):
+def restore_file(project_id: str, trash_name: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return pm.restore_file(project_id, trash_name)
     except (FileNotFoundError, ValueError) as e:
@@ -580,7 +613,8 @@ def restore_file(project_id: str, trash_name: str):
 
 
 @router.delete("/{project_id}/trash/{trash_name}")
-def purge_file(project_id: str, trash_name: str):
+def purge_file(project_id: str, trash_name: str, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return pm.purge_file(project_id, trash_name)
     except FileNotFoundError as e:
@@ -588,7 +622,8 @@ def purge_file(project_id: str, trash_name: str):
 
 
 @router.post("/{project_id}/files/{kind}/{name}/rename")
-def rename_file(project_id: str, kind: str, name: str, body: FileRenameBody):
+def rename_file(project_id: str, kind: str, name: str, body: FileRenameBody, user: dict = Depends(get_current_user)):
+    _check_owner(project_id, user)
     try:
         return pm.rename_file(project_id, kind, name, body.new_name)
     except (ValueError, FileNotFoundError) as e:

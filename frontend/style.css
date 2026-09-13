@@ -454,3 +454,31 @@ button:hover { background: var(--primary-dark); }
 .rec-actions .mini-btn { font-size: 12px; text-decoration: none; }
 .rec-actions .rec-import.done { background: #e7f6ec; color: #1a7f37; }
 .notes-path { color: var(--text-dim); font-size: 11px; margin-top: 4px; word-break: break-all; }
+
+/* ========== 登录 / 注册 ========== */
+.auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.auth-card { width: 100%; max-width: 380px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 32px 28px; box-shadow: 0 8px 30px rgba(0,0,0,.06); }
+.auth-card h1 { font-size: 22px; margin-bottom: 4px; }
+.auth-card .subtitle { margin-bottom: 22px; }
+.auth-card label { display: block; font-size: 13px; color: var(--text-dim); margin: 12px 0 4px; }
+.auth-card input { width: 100%; box-sizing: border-box; }
+.auth-btn { width: 100%; margin-top: 18px; padding: 10px; border-radius: 8px; background: var(--primary); color: #fff; border: none; font-size: 15px; cursor: pointer; }
+.auth-btn:hover { opacity: .9; }
+.auth-switch { text-align: center; font-size: 13px; color: var(--text-dim); margin-top: 14px; }
+.auth-switch a { color: var(--primary); cursor: pointer; text-decoration: none; }
+.auth-status { min-height: 20px; margin-top: 12px; font-size: 13px; color: #d93025; word-break: break-all; }
+
+/* ========== 用户栏 ========== */
+.user-bar { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.user-bar .badge-admin { background: #fff3e0; color: #b45309; }
+#userName { font-weight: 600; }
+.user-bar .mini-btn { margin-left: auto; }
+
+/* ========== 管理后台 ========== */
+.modal-wide .modal-box { max-width: 560px; }
+.admin-status { background: var(--primary-soft); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; word-break: break-all; }
+.invite-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; }
+.invite-row code { background: #f2f4f7; padding: 2px 8px; border-radius: 5px; font-weight: 600; }
+.invite-row .mini-btn { margin-left: auto; }
+#adminModal details summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; color: var(--primary); }
+#adminModal details { margin-top: 10px; }

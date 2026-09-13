@@ -11,7 +11,6 @@ from pydantic import BaseModel
 
 from auth import require_admin
 from config import get_http_proxy, get_llm_config, save_llm_config
-
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
@@ -103,10 +102,6 @@ class LLMConfigBody(BaseModel):
     timeout: str | None = None
 
 
-class NotesRootBody(BaseModel):
-    notes_root: str | None = None
-
-
 class ModelsBody(BaseModel):
     base_url: str
     api_key: str = ""
@@ -126,19 +121,17 @@ def _mask_key(key: str) -> dict[str, bool | str]:
 
 
 @router.get("/llm-providers")
-def get_providers(request: Request):
+def get_providers(admin: dict = Depends(require_admin)):
     """返回预置算力服务商列表（不含任何 Key）。"""
-    _require_loopback(request)
     return {"providers": PROVIDERS}
 
 
 @router.post("/llm-models")
-async def fetch_models(request: Request, body: ModelsBody):
+async def fetch_models(body: ModelsBody, admin: dict = Depends(require_admin)):
     """用给定 base_url + api_key 拉取该服务商真实模型列表（调 /models）。
 
     Key 只用于本次请求，不做任何存储。失败时返回预置模型表或错误信息。
     """
-    _require_loopback(request)
     base_url = (body.base_url or "").rstrip("/")
     if not base_url:
         raise HTTPException(status_code=400, detail="接口地址不能为空")
@@ -183,12 +176,11 @@ async def fetch_models(request: Request, body: ModelsBody):
 
 
 @router.post("/llm-test")
-async def test_llm(request: Request, body: LLMTestBody):
+async def test_llm(body: LLMTestBody, admin: dict = Depends(require_admin)):
     """连接测试：用当前填写的地址/Key/模型发一个最小请求，返回延迟与结果。
 
     Key 只用于本次测试，不做存储。
     """
-    _require_loopback(request)
     base_url = (body.base_url or "").rstrip("/")
     model = (body.model or "").strip()
     if not base_url:
@@ -239,8 +231,7 @@ async def test_llm(request: Request, body: LLMTestBody):
 
 
 @router.get("/llm-config")
-def get_llm_config_api(request: Request):
-    _require_loopback(request)
+def get_llm_config_api(admin: dict = Depends(require_admin)):
     cfg = get_llm_config()
     return {
         "base_url": cfg["base_url"],
@@ -251,8 +242,7 @@ def get_llm_config_api(request: Request):
 
 
 @router.post("/llm-config")
-def set_llm_config_api(request: Request, body: LLMConfigBody):
-    _require_loopback(request)
+def set_llm_config_api(body: LLMConfigBody, admin: dict = Depends(require_admin)):
     try:
         cfg = save_llm_config(
             base_url=body.base_url,
@@ -269,36 +259,4 @@ def set_llm_config_api(request: Request, body: LLMConfigBody):
         "timeout": cfg["timeout"],
         "api_key": _mask_key(cfg["api_key"]),
         "note": "配置已保存到服务端 .env 文件，立即生效。",
-    }
-
-
-# ---------------------------------------------------------------------------
-# 学习笔记根目录（Obsidian vault 路径）
-# ---------------------------------------------------------------------------
-@router.get("/notes-config")
-def get_notes_config_api(request: Request):
-    """返回当前笔记根目录配置。"""
-    _require_loopback(request)
-    root = get_notes_root()
-    return {
-        "notes_root": root,
-        "configured": bool(root),
-        "hint": "留空 = 笔记仍写在系统 data 目录；填写本地绝对路径 = 每个项目在根目录下建同名子文件夹，"
-                "可用 Obsidian 直接打开该目录作为 vault。",
-    }
-
-
-@router.post("/notes-config")
-def set_notes_config_api(request: Request, body: NotesRootBody):
-    """设置/清空笔记根目录（Obsidian vault 路径）。"""
-    _require_loopback(request)
-    try:
-        root = save_notes_root(body.notes_root)
-    except OSError as e:
-        raise HTTPException(status_code=500, detail=f"配置文件写入失败：{e}")
-    return {
-        "saved": True,
-        "notes_root": root,
-        "configured": bool(root),
-        "note": "已保存。打开学习项目时，原项目文件夹内的笔记会自动迁移到新目录。",
     }

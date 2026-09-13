@@ -83,9 +83,6 @@ def _init_db() -> None:
             )
 
 
-_init_db()
-
-
 # ---------------------------------------------------------------------------
 # 密码哈希（pbkdf2，标准库）
 # ---------------------------------------------------------------------------
@@ -180,7 +177,12 @@ def list_users() -> list[dict[str, Any]]:
         rows = c.execute(
             "SELECT id, username, role, notes_root, disabled, created_at FROM users "
             "ORDER BY created_at").fetchall()
-        return [dict(r) for r in rows]
+        users = [dict(r) for r in rows]
+        for u in users:
+            n = c.execute(
+                "SELECT COUNT(*) AS n FROM projects WHERE owner=?", (u["id"],)).fetchone()
+            u["project_count"] = n["n"] if n else 0
+        return users
 
 
 def create_user(username: str, password: str, role: str = "member",
@@ -217,6 +219,19 @@ def set_user_password(user_id: str, new_password: str) -> None:
 
 
 def set_user_notes_root(user_id: str, notes_root: str) -> None:
+    """设置用户的学习笔记根目录（Obsidian vault 路径，空字符串=清空）。"""
+    with _conn() as c:
+        c.execute("UPDATE users SET notes_root=? WHERE id=?", (notes_root or "", user_id))
+
+
+def get_user_notes_root(user_id: str) -> str:
+    """返回用户配置的笔记根目录；未配置返回空串（由 pm 回退全局配置）。"""
+    with _conn() as c:
+        row = c.execute("SELECT notes_root FROM users WHERE id=?", (user_id,)).fetchone()
+    return (row[0] or "") if row else ""
+
+
+def set_user_notes_root(user_id: str, notes_root: str) -> None:
     with _conn() as c:
         c.execute("UPDATE users SET notes_root=? WHERE id=?", (notes_root.strip(), user_id))
 
@@ -239,7 +254,12 @@ def create_invites(created_by: str, count: int = 1) -> list[str]:
 def list_invites() -> list[dict[str, Any]]:
     with _conn() as c:
         rows = c.execute("SELECT * FROM invites ORDER BY created_at DESC").fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["used"] = bool(d.get("used_by"))
+            out.append(d)
+        return out
 
 
 def delete_invite(code: str) -> bool:
@@ -299,3 +319,7 @@ def require_admin(user: dict[str, Any] = Depends(get_current_user)) -> dict[str,
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     return user
+
+
+# 模块加载末尾初始化数据库（此时所有函数已定义）
+_init_db()

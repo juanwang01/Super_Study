@@ -7,17 +7,18 @@ from __future__ import annotations
 import threading
 import time
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from auth import get_current_user
 from config import DATA_ROOT, FRONTEND_DIR, HOST, PORT, SESSION_IDLE_SAVE_SECONDS, ensure_dirs
 from core.session_manager import session_manager
 
 ensure_dirs()
 
-app = FastAPI(title="Probe‑Plan‑Teach 超级学习系统", version="0.1.0")
+app = FastAPI(title="Probe‑Plan‑Teach 超级学习系统", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,12 +28,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from api import auth_routes
 from api import projects as projects_api
 from api import session as session_api
 from api import admin as admin_api
 
-app.include_router(projects_api.router)
-app.include_router(session_api.router)
+app.include_router(auth_routes.router)
+# 业务路由全部要求登录（JWT）；auth 路由自身处理匿名注册/登录
+app.include_router(projects_api.router, dependencies=[Depends(get_current_user)])
+app.include_router(session_api.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_api.router)
 
 

@@ -3,15 +3,32 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from auth import get_current_user
 from core import project_manager as pm
 from core import project_threads as pt
 from core.agent_bridge import run_conversation
 from core.session_manager import session_manager
 
 router = APIRouter(prefix="/api/session", tags=["session"])
+
+def _session_owner(session_id: str, user: dict):
+    """会话归属校验：只能操作自己的会话。"""
+    s = session_manager.get_session(session_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="会话不存在或已过期")
+    if s.owner and s.owner != user.get("id") and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="无权操作该会话")
+    return s
+
+
+def _check_project_owner(project_id: str, user: dict) -> None:
+    owner = pm._owner_of(project_id)
+    if user.get("role") != "admin" and owner != user.get("id"):
+        raise HTTPException(status_code=403, detail="无权访问该项目")
+
 
 
 class OpenProjectBody(BaseModel):
@@ -27,13 +44,15 @@ class ThreadNameBody(BaseModel):
 
 
 @router.post("")
-def create_session():
-    s = session_manager.create_session()
-    return {"session_id": s.session_id, "projects": pm.list_projects()}
+def create_session(user: dict = Depends(get_current_user)):
+    s = session_manager.create_session(user_id=user.get("id"))
+    owner = "" if user.get("role") == "admin" else user.get("id")
+    return {"session_id": s.session_id, "projects": pm.list_projects(owner=owner)}
 
 
 @router.get("/{session_id}")
-def get_session(session_id: str):
+def get_session(session_id: str, user: dict = Depends(get_current_user)):
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -46,7 +65,9 @@ def get_session(session_id: str):
 
 
 @router.post("/{session_id}/open")
-def open_project(session_id: str, body: OpenProjectBody):
+def open_project(session_id: str, body: OpenProjectBody, user: dict = Depends(get_current_user)):
+    s = _session_owner(session_id, user)
+    _check_project_owner(body.project_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -59,7 +80,8 @@ def open_project(session_id: str, body: OpenProjectBody):
 
 
 @router.post("/{session_id}/close")
-def close_project(session_id: str):
+def close_project(session_id: str, user: dict = Depends(get_current_user)):
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -67,7 +89,8 @@ def close_project(session_id: str):
 
 
 @router.post("/{session_id}/persist")
-def persist(session_id: str):
+def persist(session_id: str, user: dict = Depends(get_current_user)):
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -78,8 +101,9 @@ def persist(session_id: str):
 # 项目内会话（线程）管理：同一课程多个会话
 # ---------------------------------------------------------------------------
 @router.get("/{session_id}/messages")
-def get_messages(session_id: str):
+def get_messages(session_id: str, user: dict = Depends(get_current_user)):
     """读取当前会话的对话历史（用于前端切换会话后渲染）。"""
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -87,7 +111,8 @@ def get_messages(session_id: str):
 
 
 @router.get("/{session_id}/threads")
-def list_threads(session_id: str):
+def list_threads(session_id: str, user: dict = Depends(get_current_user)):
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -100,7 +125,8 @@ def list_threads(session_id: str):
 
 
 @router.post("/{session_id}/threads")
-def create_thread(session_id: str, body: ThreadNameBody):
+def create_thread(session_id: str, body: ThreadNameBody, user: dict = Depends(get_current_user)):
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -111,7 +137,8 @@ def create_thread(session_id: str, body: ThreadNameBody):
 
 
 @router.post("/{session_id}/threads/{thread_id}/activate")
-def activate_thread(session_id: str, thread_id: str):
+def activate_thread(session_id: str, thread_id: str, user: dict = Depends(get_current_user)):
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -135,7 +162,8 @@ def rename_thread(session_id: str, thread_id: str, body: ThreadNameBody):
 
 
 @router.delete("/{session_id}/threads/{thread_id}")
-def delete_thread(session_id: str, thread_id: str):
+def delete_thread(session_id: str, thread_id: str, user: dict = Depends(get_current_user)):
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -150,7 +178,7 @@ def delete_thread(session_id: str, thread_id: str):
 
 
 @router.post("/{session_id}/message")
-def send_message(session_id: str, body: MessageBody):
+def send_message(session_id: str, body: MessageBody, user: dict = Depends(get_current_user)):
     """发送用户消息。
 
     结构指令（不经过 LLM，由后端直接处理）：
@@ -158,6 +186,7 @@ def send_message(session_id: str, body: MessageBody):
     - 绑定项目时："main" / "reload" / "plan" 等 → 后端处理
     其余内容进入 LLM（探查/规划/教学/诊断）。
     """
+    s = _session_owner(session_id, user)
     s = session_manager.get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在或已过期")
@@ -170,7 +199,7 @@ def send_message(session_id: str, body: MessageBody):
     if s.project_id is None:
         # 全局主菜单状态
         if re.fullmatch(r"\d+", content):
-            projects = pm.list_projects()
+            projects = pm.list_projects(owner="" if user.get("role") == "admin" else user.get("id"))
             idx = int(content) - 1
             if not (0 <= idx < len(projects)):
                 raise HTTPException(status_code=400, detail="编号超出范围")
@@ -179,14 +208,14 @@ def send_message(session_id: str, body: MessageBody):
 
         if content.lower().startswith("new ") or content.lower().startswith("new，"):
             name = content[4:].strip()
-            info = pm.create_project(name)
+            info = pm.create_project(name, owner=user.get("id"))
             ctx = session_manager.open_project(s, info["project_id"])
             ctx["guide"] = build_project_guide(ctx, is_new=True)
             return {"handled": "create_project", **ctx, "reply": None}
 
         # 其他文本在未绑定项目时 → 当作新建项目主题
         if content not in ("help", "exit"):
-            info = pm.create_project(content)
+            info = pm.create_project(content, owner=user.get("id"))
             ctx = session_manager.open_project(s, info["project_id"])
             ctx["guide"] = build_project_guide(ctx, is_new=True)
             return {"handled": "create_project", **ctx, "reply": None}

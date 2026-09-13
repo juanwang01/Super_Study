@@ -5,15 +5,50 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Probe‑Plan‑Teach 超级学习系统</title>
 <link rel="stylesheet" href="/static/vendor/vditor/index.css">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
+  <!-- ========== 登录 / 注册视图 ========== -->
+  <div id="authView" class="view">
+    <div class="auth-wrap">
+      <div class="auth-card">
+        <h1>📚 超级学习系统</h1>
+        <p class="subtitle">探查 → 规划 → 教学 ｜ 自适应学习导师</p>
+        <div id="authLoginPane">
+          <label>用户名</label>
+          <input id="loginUser" type="text" placeholder="用户名" autocomplete="username">
+          <label>密码</label>
+          <input id="loginPass" type="password" placeholder="密码" autocomplete="current-password">
+          <button id="btnLogin" class="auth-btn">登 录</button>
+          <p class="auth-switch">还没有账号？<a id="btnGoRegister" href="javascript:;">使用邀请码注册</a></p>
+        </div>
+        <div id="authRegisterPane" class="hidden">
+          <label>邀请码</label>
+          <input id="regInvite" type="text" placeholder="管理员提供的邀请码" autocomplete="off">
+          <label>用户名</label>
+          <input id="regUser" type="text" placeholder="设置用户名（4-20位）" autocomplete="username">
+          <label>密码</label>
+          <input id="regPass" type="password" placeholder="设置密码（至少6位）" autocomplete="new-password">
+          <button id="btnRegister" class="auth-btn">注 册</button>
+          <p class="auth-switch">已有账号？<a id="btnGoLogin" href="javascript:;">返回登录</a></p>
+        </div>
+        <p id="authStatus" class="auth-status"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== 主菜单视图 ========== -->
-  <div id="mainMenu" class="view">
+  <div id="mainMenu" class="view hidden">
     <div class="menu-wrap">
       <header class="menu-header">
-        <h1>📚 Probe‑Plan‑Teach 超级学习系统 <button id="btnSettings" class="settings-btn" title="系统设置（仅本机）">⚙ 设置</button></h1>
+        <h1>📚 超级学习系统 <button id="btnSettings" class="settings-btn" title="设置">⚙ 设置</button></h1>
         <p class="subtitle">探查 → 规划 → 教学 ｜ 基于最近发展区（ZPD）的自适应学习</p>
+        <div class="user-bar">
+          <span id="userBadge" class="badge">用户</span>
+          <span id="userName">—</span>
+          <button id="btnAdminPanel" class="mini-btn hidden">🛡 管理后台</button>
+          <button id="btnLogout" class="mini-btn">退出登录</button>
+        </div>
       </header>
 
       <section class="card">
@@ -269,35 +304,64 @@
     </div>
   </div>
 
-  <!-- ========== 系统设置弹层 ========== -->
+  <!-- ========== 设置弹层（每用户：仅学习笔记目录） ========== -->
   <div id="settingsModal" class="modal hidden">
     <div class="modal-box">
       <div class="modal-head">
-        <h3>系统设置：LLM 接口</h3>
+        <h3>设置：学习笔记目录</h3>
         <button id="btnCloseSettings" class="mini-btn">✕ 关闭</button>
       </div>
       <div class="material-upload">
-        <label>算力服务商（选择后自动填好接口地址）</label>
-        <select id="setProvider">
-          <option value="">加载中…</option>
-        </select>
-        <label>接口地址（OpenAI 兼容，可手动改）</label>
-        <input id="setBaseUrl" type="text" placeholder="https://ark.cn-beijing.volces.com/api/v3" autocomplete="off">
-        <label>API Key（仅保存在服务端，不显示明文）</label>
-        <input id="setApiKey" type="password" placeholder="输入你的 API Key" autocomplete="off">
-        <label>模型 <button id="btnFetchModels" class="mini-btn" type="button">🔄 拉取该服务商模型</button></label>
-        <select id="setModel"></select>
-        <label>超时秒数（默认 180）</label>
-        <input id="setTimeout" type="text" placeholder="180" autocomplete="off">
-        <label>学习笔记根目录（Obsidian vault 路径，留空=系统默认）</label>
+        <label>学习笔记根目录（Obsidian vault 路径，留空=系统默认目录）</label>
         <input id="setNotesRoot" type="text" placeholder="如 D:\ObsidianVault\学习笔记" autocomplete="off">
-        <p class="hint">填写后：每个学习项目在该目录下建同名子文件夹存放学习笔记，Obsidian 直接打开即可；原始材料 / 计划 / 快照仍留在系统 data 目录（AI 专用，不进入 vault）。</p>
+        <p class="hint">填写后：每个学习项目在该目录下自动建同名子文件夹存放学习笔记，用 Obsidian 打开即无缝衔接；原始材料 / 计划 / 快照仍留在系统 data 目录（AI 专用，不进入 vault）。</p>
         <div>
-          <button id="btnSaveSettings" class="mini-btn">💾 保存配置</button>
-          <button id="btnTestLLM" class="mini-btn test-btn">🧪 测试连接</button>
+          <button id="btnSaveNotesRoot" class="mini-btn">💾 保存</button>
           <span id="settingsStatus" class="hint"></span>
         </div>
-        <p class="hint" id="settingsHint">⚠️ 此设置仅允许本机（localhost）访问修改，防止 API Key 被远程篡改。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 管理员后台弹层（仅 admin 角色可见） ========== -->
+  <div id="adminModal" class="modal hidden">
+    <div class="modal-box modal-wide">
+      <div class="modal-head">
+        <h3>🛡 管理后台</h3>
+        <button id="btnCloseAdmin" class="mini-btn">✕ 关闭</button>
+      </div>
+      <div class="material-upload">
+        <p class="hint" style="margin:0 0 8px">LLM 接口由管理员统一配置，所有用户共用（多供应商 Key 池开发中）。</p>
+        <label>当前配置</label>
+        <div id="adminLLMStatus" class="admin-status">加载中…</div>
+        <details>
+          <summary>修改 LLM 接口配置</summary>
+          <label>算力服务商（选择后自动填好接口地址）</label>
+          <select id="adminProvider"><option value="">加载中…</option></select>
+          <label>接口地址（OpenAI 兼容，可手动改）</label>
+          <input id="adminBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" autocomplete="off">
+          <label>API Key（仅保存在服务端，不显示明文）</label>
+          <input id="adminApiKey" type="password" placeholder="输入 API Key" autocomplete="off">
+          <label>模型 <button id="btnAdminFetchModels" class="mini-btn" type="button">🔄 拉取该服务商模型</button></label>
+          <select id="adminModel"></select>
+          <label>超时秒数（默认 180）</label>
+          <input id="adminTimeout" type="text" placeholder="180" autocomplete="off">
+          <div style="margin-top:10px">
+            <button id="btnAdminSaveLLM" class="mini-btn">💾 保存配置</button>
+            <button id="btnAdminTestLLM" class="mini-btn test-btn">🧪 测试连接</button>
+            <span id="adminLLMStatus2" class="hint"></span>
+          </div>
+        </details>
+        <hr>
+        <label>邀请码管理</label>
+        <div class="search-row">
+          <button id="btnGenInvite" class="mini-btn">＋ 生成邀请码</button>
+          <span id="inviteStatus" class="hint"></span>
+        </div>
+        <div id="inviteList" class="search-results"></div>
+        <hr>
+        <label>用户管理</label>
+        <div id="adminUserList" class="search-results"></div>
       </div>
     </div>
   </div>
@@ -317,6 +381,6 @@
   <input id="fileInput" type="file" accept=".epub,.pdf,.docx,.doc,.txt,.md,.markdown,.html,.htm,.pptx,.xlsx,.xls,.csv" class="hidden">
 
 <script src="/static/vendor/vditor/index.min.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=2"></script>
 </body>
 </html>
