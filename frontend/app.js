@@ -1776,15 +1776,29 @@ function adminToggleModelInput() {
   }
 }
 
+function setTestStatus(text, cls) {
+  const st = $("adminTestStatus");
+  st.textContent = text;
+  st.className = "test-status" + (cls ? " " + cls : "");
+  if (text) $("adminLLMStatus2").textContent = text;
+}
+
 async function adminTestForm() {
+  const btn = $("btnAdminTestForm");
   const baseUrl = $("adminBaseUrl").value.trim();
   const model = currentModelValue();
   const apiKey = $("adminApiKey").value.trim();
   if (!baseUrl || !model) {
-    $("adminLLMStatus2").textContent = "❌ 请先填好接口地址并选择/输入模型";
+    setTestStatus("❌ 请先填好接口地址并选择/输入模型", "fail");
+    btn.classList.remove("test-ok");
+    btn.classList.add("test-fail");
+    setTimeout(() => btn.classList.remove("test-fail"), 2500);
     return;
   }
-  $("adminLLMStatus2").textContent = "⏳ 正在测试连接…";
+  setTestStatus("⏳ 测试中…", "");
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = "⏳ 测试中…";
   try {
     let r;
     if (adminEditId && !apiKey) {
@@ -1794,14 +1808,27 @@ async function adminTestForm() {
       r = await api("/api/admin/llm-test", "POST",
                     { base_url: baseUrl, api_key: apiKey, model: model });
     }
+    btn.classList.remove("test-ok", "test-fail");
     if (r.ok) {
-      $("adminLLMStatus2").textContent =
-        `✅ 连接成功（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} 回复：${r.reply || ""}`;
+      btn.classList.add("test-ok");
+      setTestStatus(`✅ 连接成功（${r.latency_ms}ms）${r.proxy ? "经代理" : ""}`, "ok");
+      showToast(`连接成功（${r.latency_ms}ms）${r.reply ? "回复：" + r.reply : ""}`, "success");
     } else {
-      $("adminLLMStatus2").textContent = `❌ 测试失败（${r.latency_ms}ms）${r.error || ""}`;
+      btn.classList.add("test-fail");
+      setTestStatus(`❌ ${r.error || "测试失败"}`, "fail");
     }
   } catch (e) {
-    $("adminLLMStatus2").textContent = "❌ " + e.message;
+    btn.classList.add("test-fail");
+    setTestStatus("❌ " + e.message, "fail");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    setTimeout(() => {
+      btn.classList.remove("test-ok", "test-fail");
+      if ($("adminTestStatus").textContent.startsWith("✅")) {
+        setTimeout(() => setTestStatus("", ""), 4000);
+      }
+    }, 4000);
   }
 }
 

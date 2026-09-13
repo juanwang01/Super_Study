@@ -528,3 +528,11 @@ button:hover { background: var(--primary-dark); }
 #adminModelCustom { width: 100%; }
 
 .form-head-actions { display: flex; gap: 8px; }
+
+.test-status { font-size: 12px; line-height: 1.4; max-width: 240px; }
+.test-status.ok { color: #16a34a; }
+.test-status.fail { color: #dc2626; }
+.mini-btn.test-btn:hover { border-color: var(--border); color: var(--primary); background: #f5f7ff; }
+.mini-btn.test-btn:disabled { opacity: .6; cursor: wait; }
+.mini-btn.test-btn.test-ok { color: #fff; background: #16a34a; border-color: #16a34a; }
+.mini-btn.test-btn.test-fail { color: #fff; background: #dc2626; border-color: #dc2626; }
