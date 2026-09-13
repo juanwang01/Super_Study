@@ -615,3 +615,70 @@ button:hover { background: var(--primary-dark); }
   .material-upload textarea { min-height: 60px; }
   .trash-item { flex-wrap: wrap; }
 }
+
+
+/* ============================================================
+   表单美化（豆包风格：浅灰底大圆角 + 聚焦蓝色光晕）
+   ============================================================ */
+input[type="text"], input[type="password"], input[type="url"], input[type="number"],
+input[type="search"], input[type="email"], textarea, select {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f7f8fa;
+  padding: 11px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  transition: border-color .18s, background .18s, box-shadow .18s;
+  -webkit-appearance: none;
+  appearance: none;
+  width: auto;
+}
+input::placeholder, textarea::placeholder { color: #a8b0bc; }
+input:hover, textarea:hover, select:hover { border-color: #d5dae3; background: #f4f6f9; }
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(51,112,255,.14);
+}
+/* 登录卡片输入框 */
+.auth-card input {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 15px;
+}
+/* 主菜单新建项目输入 */
+.new-project input { border-radius: 12px; padding: 12px 14px; }
+/* 搜索行 */
+.search-row input { border-radius: 12px; padding: 11px 14px; }
+/* 材料上传区 */
+.material-upload input, .material-upload textarea, .material-upload select {
+  border-radius: 10px; background: #f7f8fa; padding: 10px 12px;
+}
+/* 管理后台表单 */
+.admin-llm-form input, .admin-llm-form select, .admin-llm-form textarea {
+  border-radius: 10px; background: #f7f8fa; padding: 10px 12px;
+}
+.admin-llm-form input:focus, .admin-llm-form select:focus { background: #fff; }
+/* 模型选择器 */
+.model-select, .thread-select, #adminModelCustom { border-radius: 10px; background: #f7f8fa; }
+/* 聊天输入框 */
+.chat-input-wrap textarea { border-radius: 14px; background: #f7f8fa; padding: 12px 16px; }
+.chat-input-wrap textarea:focus { background: #fff; }
+/* 下拉容器内输入 */
+.thread-dropdown input, .admin-status input { background: #f7f8fa; }
+
+/* 按钮质感升级 */
+button { border-radius: 12px; transition: background .18s, box-shadow .18s, transform .12s, opacity .18s; }
+button:active { transform: scale(.97); }
+.auth-btn {
+  border-radius: 12px;
+  background: linear-gradient(135deg, #3b7bff, #2b5ee6);
+  box-shadow: 0 4px 14px rgba(51,112,255,.28);
+  font-weight: 600;
+  letter-spacing: 3px;
+  padding: 13px;
+}
+.auth-btn:hover { background: linear-gradient(135deg, #2f6df0, #2555d4); box-shadow: 0 6px 18px rgba(51,112,255,.34); }
+#btnSend { border-radius: 12px; font-weight: 600; }
