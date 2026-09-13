@@ -1,0 +1,17 @@
+{
+  "name": "superstudy-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "超级学习系统 - 手机端 App（Capacitor 打包）",
+  "scripts": {
+    "sync:www": "python build_mobile.py",
+    "android:build": "npx cap sync android && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/cli": "^6.2.0"
+  }
+}

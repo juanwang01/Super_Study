@@ -93,11 +93,14 @@ function inlineMd(s) {
 // ---------------------------------------------------------------------------
 // API 封装
 // ---------------------------------------------------------------------------
+const API_BASE = (typeof window !== "undefined" && window.API_BASE)
+  ? String(window.API_BASE).replace(/\/+$/, "") : "";
+
 async function api(path, method = "GET", body = null) {
   const opt = { method, headers: { "Content-Type": "application/json" } };
   if (authToken) opt.headers["Authorization"] = "Bearer " + authToken;
   if (body) opt.body = JSON.stringify(body);
-  const resp = await fetch(path, opt);
+  const resp = await fetch(API_BASE + path, opt);
   if (resp.status === 401 && !path.startsWith("/api/auth/")) {
     // 登录态失效 → 清空并回登录页
     logout(false);

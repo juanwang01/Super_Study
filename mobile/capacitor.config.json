@@ -1,0 +1,11 @@
+{
+  "appId": "com.superstudy.app",
+  "appName": "超级学习系统",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
