@@ -547,3 +547,71 @@ button:hover { background: var(--primary-dark); }
 #adminProviderForm .model-input-row select { border-color: var(--accent); background: #f8faff; font-weight: 500; }
 #adminLLMStatus2.ok { color: #16a34a; }
 #adminLLMStatus2.fail { color: #dc2626; }
+
+
+/* ============================================================
+   移动端适配（≤768px：手机 App / 窄屏浏览器）
+   ============================================================ */
+@media (max-width: 768px) {
+  body { font-size: 15px; }
+  .view { min-height: 100vh; }
+  .menu-wrap { padding: 20px 14px 48px; }
+  .menu-header h1 { font-size: 22px; }
+  .subtitle { font-size: 13px; }
+  .card { padding: 16px; }
+  .card h2 { font-size: 15px; }
+  .new-project input { min-width: 100%; }
+  .project-item { padding: 12px 14px; }
+  .user-bar { flex-wrap: wrap; gap: 8px; }
+  .user-bar .mini-btn { margin-left: 0; }
+  .proj-topbar { padding: 8px 10px; flex-wrap: wrap; gap: 6px; }
+  .proj-title h2 { font-size: 15px; }
+  .proj-title { gap: 8px; min-width: 0; }
+  .proj-actions button { padding: 5px 9px; font-size: 12px; }
+  .proj-body { flex-direction: column; height: auto; min-height: calc(100vh - 54px); }
+  .sidebar {
+    width: 100% !important; min-width: 0 !important;
+    max-height: 38vh; border-right: none; border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .sidebar.collapsed { max-height: 0 !important; opacity: 0; }
+  .tree { max-height: 34vh; }
+  .tree-node { padding: 8px 6px 8px 18px; font-size: 14px; }
+  .tree-btn { padding: 3px 8px; font-size: 12px; }
+  .sidebar-footer { padding: 6px 10px; }
+  .workspace { min-height: 62vh; }
+  .chat-messages { padding: 12px; }
+  .msg .bubble { max-width: 92%; font-size: 15px; }
+  .chat-input-wrap { padding: 8px 10px; gap: 8px; }
+  #btnSend { padding: 10px 18px; }
+  .browse-head { padding: 10px 12px; flex-wrap: wrap; }
+  .browse-body { padding: 12px 14px; }
+  .browse-toolbar { padding: 6px 10px; flex-wrap: wrap; gap: 6px; }
+  .modal { align-items: flex-end; }
+  .modal-box, .modal-box.wide {
+    width: 100vw; max-width: 100vw; max-height: 92vh;
+    border-radius: 14px 14px 0 0;
+  }
+  .modal-sm { max-width: 100vw; }
+  .modal-head { padding: 12px 14px; }
+  .modal-body { padding: 14px; }
+  .admin-llm-form .form-grid { grid-template-columns: 1fr; }
+  .admin-llm-form .fcell.span2 { grid-column: span 1; }
+  .admin-llm-toolbar { flex-wrap: wrap; }
+  .provider-actions { flex-wrap: wrap; }
+  .invite-row { flex-wrap: wrap; }
+  .invite-row .mini-btn { margin-left: 0; }
+  .admin-tabs { flex-wrap: wrap; }
+  .form-actions { flex-wrap: wrap; }
+  .model-select { max-width: none; }
+  .auth-wrap { padding: 14px; align-items: flex-start; padding-top: 7vh; }
+  .auth-card { padding: 24px 18px; }
+  .thread-bar { flex-wrap: wrap; padding: 6px 10px; }
+  .thread-dropdown { left: 8px; right: 8px; min-width: 0; }
+  .search-row { flex-wrap: wrap; }
+  .search-row input { min-width: 100%; }
+  .toast { width: calc(100vw - 32px); text-align: center; }
+  .material-upload { padding: 12px 14px; }
+  .material-upload textarea { min-height: 60px; }
+  .trash-item { flex-wrap: wrap; }
+}
