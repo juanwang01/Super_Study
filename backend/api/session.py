@@ -46,8 +46,7 @@ class ThreadNameBody(BaseModel):
 @router.post("")
 def create_session(user: dict = Depends(get_current_user)):
     s = session_manager.create_session(user_id=user.get("id"))
-    owner = "" if user.get("role") == "admin" else user.get("id")
-    return {"session_id": s.session_id, "projects": pm.list_projects(owner=owner)}
+    return {"session_id": s.session_id, "projects": pm.list_projects(owner=user.get("id"))}
 
 
 @router.get("/{session_id}")
@@ -199,7 +198,7 @@ def send_message(session_id: str, body: MessageBody, user: dict = Depends(get_cu
     if s.project_id is None:
         # 全局主菜单状态
         if re.fullmatch(r"\d+", content):
-            projects = pm.list_projects(owner="" if user.get("role") == "admin" else user.get("id"))
+            projects = pm.list_projects(owner=user.get("id"))
             idx = int(content) - 1
             if not (0 <= idx < len(projects)):
                 raise HTTPException(status_code=400, detail="编号超出范围")

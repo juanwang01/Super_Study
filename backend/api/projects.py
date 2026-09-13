@@ -60,8 +60,7 @@ class ImportUrlBody(BaseModel):
 
 @router.get("")
 def list_projects(user: dict = Depends(get_current_user)):
-    owner = "" if user.get("role") == "admin" else user.get("id")
-    return {"projects": pm.list_projects(owner=owner)}
+    return {"projects": pm.list_projects(owner=user.get("id"))}
 
 
 @router.post("")
