@@ -32,11 +32,13 @@ from api import auth_routes
 from api import projects as projects_api
 from api import session as session_api
 from api import admin as admin_api
+from api import sync as sync_api
 
 app.include_router(auth_routes.router)
 # 业务路由全部要求登录（JWT）；auth 路由自身处理匿名注册/登录
 app.include_router(projects_api.router, dependencies=[Depends(get_current_user)])
 app.include_router(session_api.router, dependencies=[Depends(get_current_user)])
+app.include_router(sync_api.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin_api.router)
 
 
