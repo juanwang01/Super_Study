@@ -1584,7 +1584,19 @@ async function loadProviders() {
 function onAdminProviderChange() {
   const pid = $("adminProvider").value;
   const p = providersCache.find(x => x.id === pid);
-  if (p) $("adminBaseUrl").value = p.base_url;
+  if (p) {
+    $("adminBaseUrl").value = p.base_url;
+    $("adminModelHint").textContent = p.hint || "";
+    // 自动带出常用模型，默认选中 default_model
+    $("adminModelCustom").classList.add("hidden");
+    $("adminModel").classList.remove("hidden");
+    fillModelSelect(p.models || [], false);
+    if (p.default_model) $("adminModel").value = p.default_model;
+    setTestStatus("", "");
+  } else {
+    $("adminBaseUrl").value = "";
+    $("adminModelHint").textContent = "";
+  }
 }
 
 // ---------- 供应商列表 ----------
@@ -1678,12 +1690,10 @@ async function adminOpenForm(p) {
   } else {
     $("adminPName").value = "";
     $("adminProvider").value = "deepseek";
-    onAdminProviderChange();
-    $("adminBaseUrl").value = (providersCache.find(x => x.id === "deepseek") || {}).base_url || "";
+    onAdminProviderChange();   // 自动带出 DeepSeek 地址 + 常用模型 + 默认模型
     $("adminApiKey").value = "";
     $("adminApiKey").placeholder = "输入 API Key";
     $("adminTimeout").value = "180";
-    adminSetModelInput("", []);
   }
 }
 
@@ -1783,22 +1793,21 @@ function setTestStatus(text, cls) {
   if (text) $("adminLLMStatus2").textContent = text;
 }
 
-async function adminTestForm() {
+async function runConnectionTest({ auto = false } = {}) {
   const btn = $("btnAdminTestForm");
   const baseUrl = $("adminBaseUrl").value.trim();
   const model = currentModelValue();
   const apiKey = $("adminApiKey").value.trim();
-  if (!baseUrl || !model) {
-    setTestStatus("❌ 请先填好接口地址并选择/输入模型", "fail");
-    btn.classList.remove("test-ok");
-    btn.classList.add("test-fail");
-    setTimeout(() => btn.classList.remove("test-fail"), 2500);
-    return;
+  if (!baseUrl) {
+    showToast("❌ 请先填好接口地址", "error");
+    return null;
+  }
+  if (!model) {
+    showToast("❌ 请先选择或输入模型（选服务商已自动带出，或点「拉取模型列表」）", "error");
+    return null;
   }
   setTestStatus("⏳ 测试中…", "");
-  btn.disabled = true;
-  const orig = btn.innerHTML;
-  btn.innerHTML = "⏳ 测试中…";
+  if (btn) btn.disabled = true;
   try {
     let r;
     if (adminEditId && !apiKey) {
@@ -1808,28 +1817,28 @@ async function adminTestForm() {
       r = await api("/api/admin/llm-test", "POST",
                     { base_url: baseUrl, api_key: apiKey, model: model });
     }
-    btn.classList.remove("test-ok", "test-fail");
     if (r.ok) {
-      btn.classList.add("test-ok");
       setTestStatus(`✅ 连接成功（${r.latency_ms}ms）${r.proxy ? "经代理" : ""}`, "ok");
-      showToast(`连接成功（${r.latency_ms}ms）${r.reply ? "回复：" + r.reply : ""}`, "success");
-    } else {
-      btn.classList.add("test-fail");
-      setTestStatus(`❌ ${r.error || "测试失败"}`, "fail");
+      if (!auto) showToast(`✅ 连接成功（${r.latency_ms}ms）`, "success");
+      return r;
     }
+    setTestStatus(`❌ ${r.error || "测试失败"}`, "fail");
+    showToast(`❌ 测试失败：${r.error || ""}`, "error");
+    return null;
   } catch (e) {
-    btn.classList.add("test-fail");
     setTestStatus("❌ " + e.message, "fail");
+    showToast("❌ 测试失败：" + e.message, "error");
+    return null;
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-    setTimeout(() => {
-      btn.classList.remove("test-ok", "test-fail");
-      if ($("adminTestStatus").textContent.startsWith("✅")) {
-        setTimeout(() => setTestStatus("", ""), 4000);
-      }
-    }, 4000);
+    if (btn) {
+      btn.disabled = false;
+      setTimeout(() => setTestStatus("", ""), 6000);
+    }
   }
+}
+
+async function adminTestForm() {
+  await runConnectionTest();
 }
 
 async function adminSaveProvider() {
@@ -1838,10 +1847,14 @@ async function adminSaveProvider() {
   const apiKey = $("adminApiKey").value.trim();
   const model = currentModelValue();
   const timeout = $("adminTimeout").value.trim() || "180";
-  if (!name) { $("adminLLMStatus2").textContent = "❌ 请填写名称"; return; }
-  if (!baseUrl) { $("adminLLMStatus2").textContent = "❌ 请填写接口地址"; return; }
-  if (!model) { $("adminLLMStatus2").textContent = "❌ 请填写默认模型"; return; }
-  if (!adminEditId && !apiKey) { $("adminLLMStatus2").textContent = "❌ 请填写 API Key"; return; }
+  if (!name) { showToast("❌ 请填写名称", "error"); return; }
+  if (!baseUrl) { showToast("❌ 请填写接口地址", "error"); return; }
+  if (!model) { showToast("❌ 请选择或输入默认模型", "error"); return; }
+  if (!adminEditId && !apiKey) { showToast("❌ 请填写 API Key", "error"); return; }
+  // 保存前自动测试：通过才保存
+  showToast("⏳ 正在测试连接…", "");
+  const t = await runConnectionTest({ auto: true });
+  if (!t) return;
   const body = { name, base_url: baseUrl, model, timeout, api_key: apiKey };
   try {
     if (adminEditId) {
@@ -1854,7 +1867,7 @@ async function adminSaveProvider() {
     adminFormClose();
     loadAdminProviders();
   } catch (e) {
-    $("adminLLMStatus2").textContent = "❌ " + e.message;
+    showToast("❌ " + e.message, "error");
   }
 }
 
