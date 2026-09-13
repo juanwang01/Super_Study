@@ -1,0 +1,26 @@
+# learner_state 状态快照数据规范
+# 位置：<项目根>/.learn_config/state_snapshot/snapshot_<时间戳>.yaml
+#      snapshot_latest.yaml 为当前最新快照（内容为最近一份的副本）
+# 作用：会话恢复进度的机器可读状态；Agent 通过 save_snapshot 工具写入
+
+learner_state:
+  mastered:                # 已经掌握的概念
+    - string
+  partial_understand:      # 部分理解：概念 + 模糊点说明
+    - concept: string
+      note: string
+  misconceptions:          # 认知误区：概念 + 混淆根源类型（见枚举）
+    - concept: string
+      root_cause: string   # 枚举：概念混淆/边界混淆/判据误用/类推过度/前提缺失/术语误读/对称性错判/无
+  missing_prerequisite:    # 缺失前置知识点
+    - string
+  zpd_status: string       # 枚举：within | too_easy | too_hard
+  current_topic: string    # 当前主题
+  pending_list:            # 待讲清单（【预告】延后的知识点）
+    - string
+  current_teaching_unit: string  # 当前正在学习单元名称
+
+meta:
+  snapshot_version: integer      # 快照版本号，递增
+  updated_at: string             # ISO8601 更新时间
+  last_note_file: string         # 最近一次归档的笔记文件名（可选）

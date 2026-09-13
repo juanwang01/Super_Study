@@ -1,0 +1,28 @@
+# ---------- 密钥与配置（绝不提交） ----------
+backend/.env
+
+# ---------- 运行时数据 ----------
+backend/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+
+# ---------- 数据目录（用户数据/项目/数据库，不提交） ----------
+data/
+
+# ---------- 前端依赖 ----------
+frontend/vendor/vditor/
+
+# ---------- 临时与系统文件 ----------
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+s*.png
+verify_*.py
+clean_*.py
+
+# ---------- 构建产物 ----------
+dist/
+build/
+*.exe

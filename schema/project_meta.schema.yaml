@@ -1,0 +1,15 @@
+# project.meta.yaml 数据规范
+# 位置：<项目根>/.learn_config/project.meta.yaml
+# 作用：每个学习项目的元数据，供 list_project / load_project 读取
+
+project_id: string            # 必填，uuid4 字符串，唯一标识
+project_name: string          # 必填，项目名称（文件夹名）
+description: string           # 可选，项目描述
+create_time: string           # 必填，ISO8601 格式，如 2026-09-13T21:00:00+08:00
+mode: string                  # 必填，枚举：document_anchor | general
+active_material_set:          # 当前生效主素材文件名列表
+  - string
+supplementary_materials:      # 补充参考素材文件名列表
+  - string
+last_learn_time: string       # 可选，ISO8601，最近一次学习时间
+note_count: integer           # 可选，已生成单元笔记数量（后端维护）

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Probe‑Plan‑Teach 超级学习系统</title>
+<link rel="stylesheet" href="/static/vendor/vditor/index.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- ========== 主菜单视图 ========== -->
+  <div id="mainMenu" class="view">
+    <div class="menu-wrap">
+      <header class="menu-header">
+        <h1>📚 Probe‑Plan‑Teach 超级学习系统 <button id="btnSettings" class="settings-btn" title="系统设置（仅本机）">⚙ 设置</button></h1>
+        <p class="subtitle">探查 → 规划 → 教学 ｜ 基于最近发展区（ZPD）的自适应学习</p>
+      </header>
+
+      <section class="card">
+        <h2>学习项目</h2>
+        <div id="projectList" class="project-list">
+          <p class="empty">加载中…</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>学习笔记目录 <button id="btnNotesConfig" class="mini-btn" style="margin-left:8px">⚙ 设置</button></h2>
+        <p id="notesStatus" class="hint">加载中…</p>
+        <p class="hint">笔记可写入你的 Obsidian vault 路径（如 D:\ObsidianVault\学习笔记），每个项目自动建同名子文件夹，用 Obsidian 打开即无缝衔接。</p>
+      </section>
+
+      <section class="card">
+        <h2>新建学习项目</h2>
+        <div class="new-project">
+          <input id="newProjectName" type="text" placeholder="输入主题名称，如：计算机网络" autocomplete="off">
+          <input id="newProjectDesc" type="text" placeholder="项目描述（可选）" autocomplete="off">
+          <button id="btnCreateProject">创建并开始</button>
+        </div>
+        <p class="hint">提示：创建后进入项目，可通过「原始材料 → 上传文件」导入教材（文档锚定模式），或直接开始通用学习。</p>
+      </section>
+
+      <footer class="menu-footer">
+        <span>数据保存在服务端 data/ 目录，每个主题一个独立文件夹</span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ========== 项目视图 ========== -->
+  <div id="projectView" class="view hidden">
+    <header class="proj-topbar">
+      <div class="proj-title">
+        <button id="btnToggleSidebar" class="sidebar-toggle" title="折叠/展开目录树">⫷</button>
+        <button id="btnBack" title="返回主菜单（自动保存）">← 主菜单</button>
+        <h2 id="projName">项目</h2>
+        <span id="projMode" class="badge">general</span>
+      </div>
+      <div class="proj-actions">
+        <button id="btnPersist" title="强制保存当前状态快照">💾 保存</button>
+        <button id="btnReload" title="从磁盘重新加载">⟳ 刷新</button>
+      </div>
+    </header>
+
+    <div class="proj-body">
+      <!-- 左栏：目录树（Obsidian 风格） -->
+      <aside id="sidebar" class="sidebar">
+        <div class="tree">
+          <div class="tree-group">
+            <div class="tree-group" data-group="mat">
+              <div class="tree-group-head">
+                <span class="caret">▾</span> 原始材料
+                <span class="tree-count" id="matCount">0</span>
+                <span class="tree-actions">
+                  <button id="btnSearchMat" class="tree-btn" title="从网络搜索学习材料">🔍 搜资料</button>
+                  <button id="btnUploadMat" class="tree-btn" title="上传文件（.md/.txt）">⬆ 上传</button>
+                  <button id="btnPasteMat" class="tree-btn" title="粘贴文本素材">📋 粘贴</button>
+                </span>
+              </div>
+              <div class="tree-children" id="matTree"></div>
+            <div class="tree-group plan-subgroup" data-group="rawsrc">
+              <div class="tree-group-head">
+                <span class="caret">▾</span> 源文件（原始格式）
+                <span class="tree-count" id="rawSrcCount">0</span>
+              </div>
+              <div class="tree-children" id="rawSrcTree"></div>
+            </div>
+            <div class="tree-group plan-subgroup" data-group="rawquar">
+              <div class="tree-group-head">
+                <span class="caret">▾</span> 无法处理
+                <span class="tree-count" id="rawQuarCount">0</span>
+              </div>
+              <div class="tree-children" id="rawQuarTree"></div>
+            </div>
+          </div>
+
+          <div class="tree-group">
+            <div class="tree-group-head" data-group="note">
+              <span class="caret">▾</span> 学习笔记
+              <span class="tree-count" id="noteCount">0</span>
+              <span class="tree-actions">
+                <button id="btnNewNote" class="tree-btn" title="新建笔记">＋ 新建</button>
+              </span>
+            </div>
+            <div class="tree-children" id="noteTree"></div>
+          </div>
+
+          <div class="tree-group" data-group="plan">
+            <div class="tree-group-head">
+              <span class="caret">▾</span> 学习计划
+              <span class="tree-count" id="planCount">0</span>
+            </div>
+            <div class="tree-children" id="planTree"></div>
+            <div class="tree-group plan-subgroup" data-group="planhist">
+              <div class="tree-group-head">
+                <span class="caret">▾</span> 历史计划
+                <span class="tree-count" id="planHistCount">0</span>
+              </div>
+              <div class="tree-children" id="planHistTree"></div>
+            </div>
+          </div>
+
+          <div class="tree-group">
+            <div class="tree-group-head" data-group="snap">
+              <span class="caret">▾</span> 状态快照 / 进度
+            </div>
+            <div class="tree-children">
+              <div class="tree-node" id="nodeSnapshot" title="点击查看">📄 snapshot_latest.yaml</div>
+            </div>
+          </div>
+
+          <div class="tree-group">
+            <div class="tree-group-head" data-group="log">
+              <span class="caret">▾</span> 学习日志
+            </div>
+            <div class="tree-children">
+              <div class="tree-node" id="nodeLog" title="点击查看机器学习元日志">📄 learn_session.log</div>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-footer">
+          <button id="btnTrash" class="mini-btn trash-btn" title="回收站：误删的文件可在此恢复">🗑 回收站</button>
+          <div>点击 md 自动切换查看 ｜ 支持编辑 / 重命名 / 删除</div>
+          <div id="notesPathLabel" class="notes-path"></div>
+        </div>
+      </aside>
+
+      <!-- 右区：Tab 切换 聊天 / 资料浏览 -->
+      <main class="workspace">
+        <div class="tabbar">
+          <button id="tabChat" class="tab active">💬 聊天</button>
+          <button id="tabBrowse" class="tab">📖 文件</button>
+        </div>
+
+        <!-- 聊天面板 -->
+        <div id="chatPane" class="pane">
+          <div class="thread-bar">
+            <button id="btnThreadSelect" class="thread-select" title="切换会话">💬 <span id="threadName">默认会话</span> <span class="caret">▾</span></button>
+            <button id="btnNewThread" class="mini-btn" title="新建会话">＋ 新会话</button>
+            <div id="threadDropdown" class="thread-dropdown hidden"></div>
+          </div>
+          <div id="chatMessages" class="chat-messages"></div>
+          <div class="chat-input-wrap">
+            <textarea id="chatInput" rows="3"
+              placeholder="输入内容… ｜ 指令：main 返回主菜单 / plan 看计划 / progress 看进度 / 导出日志 / 复习 / 深挖"></textarea>
+            <button id="btnSend">发送</button>
+          </div>
+        </div>
+
+        <!-- 文件浏览/编辑面板 -->
+        <div id="browsePane" class="pane hidden">
+          <div class="browse-toolbar">
+            <div class="browse-head-left">
+              <span id="browseTitle">文件</span>
+              <span id="browseMeta" class="browse-meta"></span>
+            </div>
+            <div class="browse-actions" id="browseActions">
+              <button id="btnFileEdit" class="mini-btn">✏️ 编辑</button>
+              <button id="btnFileSave" class="mini-btn save-btn hidden">💾 保存</button>
+              <button id="btnFileCancel" class="mini-btn hidden">✕ 取消</button>
+              <button id="btnFileRename" class="mini-btn hidden">✏️ 重命名</button>
+              <button id="btnFileDelete" class="mini-btn danger-btn hidden">🗑 删除</button>
+            </div>
+          </div>
+          <div id="browseView" class="browse-body markdown">
+            <p class="empty">← 在左侧目录树中选择要查看的内容：原始材料、学习笔记、学习计划、状态快照。</p>
+          </div>
+          <div id="browseEditor" class="browse-editor hidden"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ========== 回收站弹层 ========== -->
+  <div id="trashModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>🗑 回收站</h3>
+        <button id="btnCloseTrash" class="mini-btn">✕ 关闭</button>
+      </div>
+      <div id="trashList" class="search-results">
+        <p class="hint">这里是被删除的原始材料 / 学习笔记（已移入系统回收站，不影响 Obsidian 之外的目录）。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 网络搜资料弹层 ========== -->
+  <div id="searchModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>🔍 从网络找学习材料</h3>
+        <button id="btnCloseSearch" class="mini-btn">✕ 关闭</button>
+      </div>
+      <div class="material-upload">
+        <label>按主题搜索（维基教科书 / 维基百科）</label>
+        <div class="search-row">
+          <input id="searchQuery" type="text" placeholder="如：计算机网络 入门" autocomplete="off">
+          <button id="btnDoSearch" class="mini-btn">🔍 搜索</button>
+        </div>
+        <div id="searchResults" class="search-results">
+          <p class="hint">输入主题后搜索，选择条目导入（自动转 Markdown 并加入原始材料）。</p>
+        </div>
+        <hr>
+        <label>或直接粘贴资料链接（网页 / PDF / EPUB / DOCX…）</label>
+        <div class="search-row">
+          <input id="importUrlInput" type="text" placeholder="https://…" autocomplete="off">
+          <button id="btnImportUrl" class="mini-btn">⬇ 下载并导入</button>
+        </div>
+        <span id="searchStatus" class="hint"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 新建笔记弹层 ========== -->
+  <div id="noteModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>新建学习笔记</h3>
+        <button id="btnCloseNote" class="mini-btn">✕ 关闭</button>
+      </div>
+      <div class="material-upload">
+        <label>笔记文件名（自动补 .md）</label>
+        <input id="noteFileName" type="text" placeholder="如 单元02-进程与线程" autocomplete="off">
+        <label>初始内容（可留空，创建后进入编辑器书写）</label>
+        <textarea id="noteContent" rows="6" placeholder="选填…"></textarea>
+        <div>
+          <button id="btnNoteSave" class="mini-btn">📝 创建并编辑</button>
+          <span id="noteStatus" class="hint"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 粘贴素材弹层 ========== -->
+  <div id="pasteModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>粘贴原始素材</h3>
+        <button id="btnClosePaste" class="mini-btn">✕ 关闭</button>
+      </div>
+      <div class="material-upload">
+        <label>素材文件名（如 主教材.md / 讲义.txt）</label>
+        <input id="pasteFileName" type="text" placeholder="主教材.md" autocomplete="off">
+        <label>素材全文（教学将严格引用此原文）</label>
+        <textarea id="pasteContent" rows="10" placeholder="粘贴教材/讲义全文…"></textarea>
+        <div>
+          <button id="btnPasteSave" class="mini-btn">保存为主素材</button>
+          <span id="pasteStatus" class="hint"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 系统设置弹层 ========== -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>系统设置：LLM 接口</h3>
+        <button id="btnCloseSettings" class="mini-btn">✕ 关闭</button>
+      </div>
+      <div class="material-upload">
+        <label>算力服务商（选择后自动填好接口地址）</label>
+        <select id="setProvider">
+          <option value="">加载中…</option>
+        </select>
+        <label>接口地址（OpenAI 兼容，可手动改）</label>
+        <input id="setBaseUrl" type="text" placeholder="https://ark.cn-beijing.volces.com/api/v3" autocomplete="off">
+        <label>API Key（仅保存在服务端，不显示明文）</label>
+        <input id="setApiKey" type="password" placeholder="输入你的 API Key" autocomplete="off">
+        <label>模型 <button id="btnFetchModels" class="mini-btn" type="button">🔄 拉取该服务商模型</button></label>
+        <select id="setModel"></select>
+        <label>超时秒数（默认 180）</label>
+        <input id="setTimeout" type="text" placeholder="180" autocomplete="off">
+        <label>学习笔记根目录（Obsidian vault 路径，留空=系统默认）</label>
+        <input id="setNotesRoot" type="text" placeholder="如 D:\ObsidianVault\学习笔记" autocomplete="off">
+        <p class="hint">填写后：每个学习项目在该目录下建同名子文件夹存放学习笔记，Obsidian 直接打开即可；原始材料 / 计划 / 快照仍留在系统 data 目录（AI 专用，不进入 vault）。</p>
+        <div>
+          <button id="btnSaveSettings" class="mini-btn">💾 保存配置</button>
+          <button id="btnTestLLM" class="mini-btn test-btn">🧪 测试连接</button>
+          <span id="settingsStatus" class="hint"></span>
+        </div>
+        <p class="hint" id="settingsHint">⚠️ 此设置仅允许本机（localhost）访问修改，防止 API Key 被远程篡改。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 轻提示 ========== -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- ========== 拖入文件遮罩 ========== -->
+  <div id="dropOverlay">
+    <div class="drop-box">
+      <div class="drop-icon">📥</div>
+      <div id="dropLabel">松开鼠标，导入文件并预处理为学习材料</div>
+    </div>
+  </div>
+
+  <!-- 隐藏的文件选择器 -->
+  <input id="fileInput" type="file" accept=".epub,.pdf,.docx,.doc,.txt,.md,.markdown,.html,.htm,.pptx,.xlsx,.xls,.csv" class="hidden">
+
+<script src="/static/vendor/vditor/index.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
