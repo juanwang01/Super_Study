@@ -723,3 +723,18 @@ button:active { transform: scale(.97); }
 }
 /* 手机端左侧目录抽屉 */
 .sidebar-mask { position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 54; }
+
+/* 豆包风格思考反馈：跳动点动画 */
+.rec-loading { display: inline-flex; align-items: center; gap: 6px; color: #666; }
+.typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary, #3370ff); display: inline-block; animation: typingBounce 1.2s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay: .15s; }
+.typing-dot:nth-child(3) { animation-delay: .3s; }
+@keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+/* 管理后台按钮语义色：测试=绿 / 编辑=蓝 / 删除=红（默认可见，不再全灰） */
+.mini-btn.test-btn { border-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+.mini-btn.test-btn:hover { background: #16a34a; color: #fff; }
+.mini-btn.edit-btn { border-color: var(--primary); color: var(--primary); background: #f5f7ff; }
+.mini-btn.edit-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.mini-btn.danger-btn { border-color: var(--danger); color: var(--danger); background: #fef0ef; }
+.mini-btn.danger-btn:hover { background: var(--danger); color: #fff; border-color: var(--danger); }

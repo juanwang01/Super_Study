@@ -373,7 +373,7 @@ async function smartMaterialCheck(projectId) {
   hint.className = "msg assistant mat-hint";
   const bubble = document.createElement("div");
   bubble.className = "bubble";
-  bubble.innerHTML = '<span class="rec-loading">🧠 AI 正在分析学习准备（状态/资料缺口）…</span>';
+  bubble.innerHTML = '<span class="rec-loading"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span> AI 正在分析学习准备（状态/资料缺口）</span>';
   hint.appendChild(bubble);
   $("chatMessages").appendChild(hint);
   $("chatMessages").scrollTop = $("chatMessages").scrollHeight;
@@ -385,6 +385,7 @@ async function smartMaterialCheck(projectId) {
       // 准备阶段：AI 第一条消息 = 状态分析 + 资料准备建议 + 下一步引导
       bubble.innerHTML = mdToHtml(analysis);
       hint.classList.remove("mat-hint");
+      $("chatMessages").scrollTop = $("chatMessages").scrollHeight;
     } else if (r.need_material && (r.gap || r.reason)) {
       bubble.innerHTML = mdToHtml(`📚 **AI 分析**：${escapeHtml(r.gap || r.reason)}。回复「要」让我搜集资料。`);
     } else {
@@ -775,11 +776,17 @@ async function openProject(projectId) {
 }
 
 async function createAndOpen(name, desc) {
+  const btn = $("btnCreateProject");
+  const original = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 创建中…"; }
   try {
     const data = await api("/api/projects", "POST", { project_name: name, description: desc });
     await openProject(data.project_id);
+    if ($("newProjectName")) $("newProjectName").value = "";
   } catch (e) {
     showToast("创建项目失败：" + e.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = original; }
   }
 }
 
@@ -1670,7 +1677,7 @@ async function loadAdminProviders() {
         </div>
         <div class="provider-actions">
           <button class="mini-btn test-btn" data-act="test" data-id="${p.id}">🧪 测试连接</button>
-          <button class="mini-btn" data-act="edit" data-id="${p.id}">✏️ 编辑</button>
+          <button class="mini-btn edit-btn" data-act="edit" data-id="${p.id}">✏️ 编辑</button>
           <button class="mini-btn danger-btn" data-act="del" data-id="${p.id}">🗑 删除</button>
         </div>`;
       card.querySelector('[data-act="test"]').onclick = (ev) => adminTestProvider(p, ev.currentTarget);

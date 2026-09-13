@@ -345,7 +345,7 @@ def guide_material(project_id: str, user: dict = Depends(get_current_user)):
         "3. 不要无脑建议拓展；只在有明确缺口时建议。\n"
         '输出 JSON：{"need": true/false, "gap": "缺什么（一句话，不需要则空字符串）", "reason": "判断理由（一句话）", '
         '"analysis": "面向用户的准备分析（2-3句，中文，直接可展示）：①当前状态摘要（素材/计划/进度）；②资料准备结论'
-        '（需要资料则说明缺什么并提示：回复「要」我可搜集资料；不需要则说明现有够用、无需额外准备）；③下一步提示'
+        '（需要资料则说明缺什么并提示：回复「要」我可搜集资料，或直接上传资料文件（支持 EPUB / PDF / TXT / Markdown，拖拽到目录即可自动预处理）；不需要则说明现有够用、无需额外准备）；③下一步提示'
         '（提示用户回复「开始」或任意内容即可进入学习）。"}。'
         "只输出 JSON。"
     )
@@ -373,11 +373,13 @@ def guide_material(project_id: str, user: dict = Depends(get_current_user)):
     if not analysis:
         if need:
             analysis = (f"项目【{topic}】目前{'没有任何素材，' if not materials else ''}"
-                        f"{'缺少' + gap + '，' if gap else ''}建议先准备资料。回复「要」我可帮你搜集网络资料。"
-                        f"或回复「开始」直接开始学习。")
+                        f"{'缺少' + gap + '，' if gap else ''}建议先准备资料：回复「要」我可帮你搜集网络资料，"
+                        f"或直接上传资料文件（支持 EPUB / PDF / TXT / Markdown，拖拽到目录即自动预处理）。"
+                        f"回复「开始」也可直接进入学习。")
         else:
             analysis = (f"项目【{topic}】状态良好：{'已有 ' + str(len(materials)) + ' 份素材' if materials else '暂无素材'}，"
-                        f"现有准备已足够支撑学习，无需额外拓展资料。回复「开始」即可进入学习。")
+                        f"现有准备已足够支撑学习，无需额外拓展资料。如你有自己的教材/讲义，也可直接上传"
+                        f"（支持 EPUB / PDF / TXT / Markdown，拖拽到目录即自动预处理）。回复「开始」即可进入学习。")
 
     if not need:
         return {

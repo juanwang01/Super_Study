@@ -332,12 +332,12 @@ def build_project_guide(ctx: dict, is_new: bool = False) -> str:
     else:
         lines.append("")
         lines.append(f"✅ 文档锚定模式：教学严格引用素材区原文（{len(materials)} 份）。")
+    lines.append("📤 也可自行上传资料：EPUB / PDF / TXT / Markdown，拖拽到左侧目录即自动预处理。")
 
     # 3) 下一步行动：先进入 AI 准备分析阶段，再开始学习流程
-    lines.append("")
     if state.get("current_teaching_unit"):
+        lines.append("")
         lines.append(f"📖 上次学到：{state['current_teaching_unit']}。")
-    lines.append("🧠 正在分析学习准备（状态/资料缺口）…")
 
     return "\n".join(lines)
 
