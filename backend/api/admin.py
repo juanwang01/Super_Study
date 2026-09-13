@@ -112,6 +112,12 @@ class ProviderBody(BaseModel):
     enabled: bool | None = None
 
 
+class LLMTestBody(BaseModel):
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+
+
 class ModelsBody(BaseModel):
     base_url: str = ""
     api_key: str = ""
@@ -197,6 +203,54 @@ def delete_provider(provider_id: int, admin: dict = Depends(require_admin)):
     if not prov.delete_provider(provider_id):
         raise HTTPException(status_code=404, detail="供应商不存在")
     return {"deleted": True}
+
+
+@router.post("/llm-test")
+async def test_llm_form(body: LLMTestBody, admin: dict = Depends(require_admin)):
+    """表单测试：用填写的地址/Key/模型发最小请求（Key 仅本次使用）。"""
+    base_url = (body.base_url or "").rstrip("/")
+    model = (body.model or "").strip()
+    if not base_url:
+        raise HTTPException(status_code=400, detail="接口地址不能为空")
+    if not model:
+        raise HTTPException(status_code=400, detail="请先选择模型")
+    api_key = (body.api_key or "").strip()
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    client_kwargs = {"timeout": 30}
+    proxy = get_http_proxy()
+    if proxy:
+        client_kwargs["proxy"] = proxy
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": "回复两个字：正常"}],
+        "max_tokens": 16,
+        "temperature": 0,
+    }
+    import time
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(**client_kwargs) as client:
+            resp = await client.post(base_url + "/chat/completions",
+                                     json=payload, headers=headers)
+            latency = int((time.time() - t0) * 1000)
+            if resp.status_code == 200:
+                data = resp.json()
+                reply = ((data.get("choices") or [{}])[0]
+                         .get("message", {}).get("content", ""))
+                return {"ok": True, "latency_ms": latency,
+                        "reply": reply[:80], "proxy": bool(proxy)}
+            if resp.status_code in (401, 403):
+                return {"ok": False, "latency_ms": latency,
+                        "error": f"API Key 无效或无权限（HTTP {resp.status_code}）", "proxy": bool(proxy)}
+            return {"ok": False, "latency_ms": latency,
+                    "error": f"服务商返回错误（HTTP {resp.status_code}）：{resp.text[:200]}",
+                    "proxy": bool(proxy)}
+    except Exception as e:
+        latency = int((time.time() - t0) * 1000)
+        return {"ok": False, "latency_ms": latency,
+                "error": f"无法连接：{e}", "proxy": bool(proxy)}
 
 
 @router.post("/llm-models")

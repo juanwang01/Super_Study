@@ -1673,9 +1673,8 @@ async function adminOpenForm(p) {
     $("adminBaseUrl").value = curUrl;
     $("adminApiKey").value = "";
     $("adminApiKey").placeholder = p.key.configured ? `已配置（${p.key.masked}），留空不修改` : "输入 API Key";
-    $("adminModel").value = p.model || "";
     $("adminTimeout").value = p.timeout || "180";
-    fillModelDatalist(p.models || []);
+    adminSetModelInput(p.model || "", p.models || []);
   } else {
     $("adminPName").value = "";
     $("adminProvider").value = "deepseek";
@@ -1683,9 +1682,8 @@ async function adminOpenForm(p) {
     $("adminBaseUrl").value = (providersCache.find(x => x.id === "deepseek") || {}).base_url || "";
     $("adminApiKey").value = "";
     $("adminApiKey").placeholder = "输入 API Key";
-    $("adminModel").value = "";
     $("adminTimeout").value = "180";
-    fillModelDatalist([]);
+    adminSetModelInput("", []);
   }
 }
 
@@ -1695,14 +1693,49 @@ function adminFormClose() {
   adminEditId = null;
 }
 
-function fillModelDatalist(models) {
-  const dl = $("adminModelList");
-  dl.innerHTML = "";
+function currentModelValue() {
+  const sel = $("adminModel");
+  const custom = $("adminModelCustom");
+  return !custom.classList.contains("hidden") ? custom.value.trim() : sel.value;
+}
+
+function fillModelSelect(models, keepValue) {
+  const sel = $("adminModel");
+  const prev = keepValue ? sel.value : "";
+  sel.innerHTML = '<option value="">（先拉取模型或手动输入）</option>';
   (models || []).forEach(m => {
     const opt = document.createElement("option");
     opt.value = m;
-    dl.appendChild(opt);
+    opt.textContent = m;
+    sel.appendChild(opt);
   });
+  if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+  else if (models && models.length) sel.value = models[0];
+}
+
+function adminSetModelInput(value, models) {
+  // 有模型表 → 用下拉；否则手动输入
+  if (models && models.length) {
+    $("adminModelCustom").classList.add("hidden");
+    $("adminModel").classList.remove("hidden");
+    fillModelSelect(models);
+    if (value) {
+      if (models.includes(value)) $("adminModel").value = value;
+      else {
+        $("adminModel").classList.add("hidden");
+        $("adminModelCustom").classList.remove("hidden");
+        $("adminModelCustom").value = value;
+      }
+    }
+  } else if (value) {
+    $("adminModel").classList.add("hidden");
+    $("adminModelCustom").classList.remove("hidden");
+    $("adminModelCustom").value = value;
+  } else {
+    $("adminModelCustom").classList.add("hidden");
+    $("adminModel").classList.remove("hidden");
+    fillModelSelect([]);
+  }
 }
 
 async function adminFetchModels() {
@@ -1718,11 +1751,54 @@ async function adminFetchModels() {
       r = await api("/api/admin/llm-models", "POST", { base_url: baseUrl, api_key: apiKey });
     }
     if (r.source === "live" && r.models.length) {
-      fillModelDatalist(r.models);
-      if (!$("adminModel").value) $("adminModel").value = r.models[0];
-      $("adminLLMStatus2").textContent = `✅ 已获取 ${r.models.length} 个模型，点击输入框可下拉选择`;
+      fillModelSelect(r.models, false);
+      $("adminModelCustom").classList.add("hidden");
+      $("adminModel").classList.remove("hidden");
+      $("adminLLMStatus2").textContent = `✅ 已获取 ${r.models.length} 个模型`;
     } else {
       $("adminLLMStatus2").textContent = "⚠️ " + (r.error || "未获取到模型");
+    }
+  } catch (e) {
+    $("adminLLMStatus2").textContent = "❌ " + e.message;
+  }
+}
+
+function adminToggleModelInput() {
+  const sel = $("adminModel");
+  const custom = $("adminModelCustom");
+  if (custom.classList.contains("hidden")) {
+    custom.value = sel.value && sel.value !== "（先拉取模型或手动输入）" ? sel.value : "";
+    custom.classList.remove("hidden");
+    sel.classList.add("hidden");
+  } else {
+    sel.classList.remove("hidden");
+    custom.classList.add("hidden");
+  }
+}
+
+async function adminTestForm() {
+  const baseUrl = $("adminBaseUrl").value.trim();
+  const model = currentModelValue();
+  const apiKey = $("adminApiKey").value.trim();
+  if (!baseUrl || !model) {
+    $("adminLLMStatus2").textContent = "❌ 请先填好接口地址并选择/输入模型";
+    return;
+  }
+  $("adminLLMStatus2").textContent = "⏳ 正在测试连接…";
+  try {
+    let r;
+    if (adminEditId && !apiKey) {
+      // 编辑模式 + 未填 Key → 用服务端已存 Key 测试
+      r = await api(`/api/admin/llm-providers/${adminEditId}/test`, "POST", { model });
+    } else {
+      r = await api("/api/admin/llm-test", "POST",
+                    { base_url: baseUrl, api_key: apiKey, model: model });
+    }
+    if (r.ok) {
+      $("adminLLMStatus2").textContent =
+        `✅ 连接成功（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} 回复：${r.reply || ""}`;
+    } else {
+      $("adminLLMStatus2").textContent = `❌ 测试失败（${r.latency_ms}ms）${r.error || ""}`;
     }
   } catch (e) {
     $("adminLLMStatus2").textContent = "❌ " + e.message;
@@ -1733,7 +1809,7 @@ async function adminSaveProvider() {
   const name = $("adminPName").value.trim();
   const baseUrl = $("adminBaseUrl").value.trim();
   const apiKey = $("adminApiKey").value.trim();
-  const model = $("adminModel").value.trim();
+  const model = currentModelValue();
   const timeout = $("adminTimeout").value.trim() || "180";
   if (!name) { $("adminLLMStatus2").textContent = "❌ 请填写名称"; return; }
   if (!baseUrl) { $("adminLLMStatus2").textContent = "❌ 请填写接口地址"; return; }
@@ -1861,6 +1937,8 @@ async function init() {
   $("btnAdminFetchModels").onclick = adminFetchModels;
   $("btnAdminAddProvider").onclick = () => adminOpenForm(null);
   $("btnAdminFormClose").onclick = adminFormClose;
+  $("btnModelManual").onclick = adminToggleModelInput;
+  $("btnAdminTestForm").onclick = adminTestForm;
   $("btnAdminSaveLLM").onclick = adminSaveProvider;
   // 用户侧模型选择
   $("modelSelect").addEventListener("change", async (e) => {
