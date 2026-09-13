@@ -721,6 +721,29 @@ async function loadProjects() {
   }
 }
 
+async function loadModelOptions(selectedProvider) {
+  const sel = $("modelSelect");
+  sel.innerHTML = '<option value="">系统默认（自动）</option>';
+  sel.disabled = true;
+  try {
+    const r = await api("/api/session/llm/options");
+    (r.options || []).forEach(o => {
+      const opt = document.createElement("option");
+      opt.value = o.provider_id;
+      opt.textContent = `${o.provider_name} · ${o.model}`;
+      sel.appendChild(opt);
+    });
+    if (selectedProvider) {
+      sel.value = String(selectedProvider);
+    } else {
+      sel.value = "";
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">模型加载失败</option>';
+  }
+  sel.disabled = false;
+}
+
 async function openProject(projectId) {
   try {
     const data = await api(`/api/session/${sessionId}/open`, "POST", { project_id: projectId });
@@ -731,6 +754,7 @@ async function openProject(projectId) {
       guide: data.guide,
       thread_id: data.thread_id,
     });
+    loadModelOptions(data.model_provider);
   } catch (e) {
     alert("打开项目失败：" + e.message);
   }
@@ -1533,26 +1557,15 @@ function switchAdminTab(name) {
 function showAdminPanel() {
   $("adminModal").classList.remove("hidden");
   switchAdminTab("LLM");
-  loadAdminLLMStatus();
+  loadAdminProviders();
   loadInvites();
   loadAdminUsers();
-  $("adminLLMForm").classList.add("hidden");
-}
-
-async function loadAdminLLMStatus() {
-  try {
-    const cfg = await api("/api/admin/llm-config");
-    $("adminLLMStatus").textContent =
-      `接口：${cfg.base_url || "未配置"} ｜ 模型：${cfg.model || "—"} ｜ ` +
-      (cfg.api_key.configured ? `Key：${cfg.api_key.masked}` : "Key：未配置");
-  } catch (e) {
-    $("adminLLMStatus").textContent = "读取失败：" + e.message;
-  }
+  adminFormClose();
 }
 
 async function loadProviders() {
   if (providersCache.length) return;
-  const data = await api("/api/admin/llm-providers");
+  const data = await api("/api/admin/llm-presets");
   providersCache = data.providers || [];
   const sel = $("adminProvider");
   sel.innerHTML = "";
@@ -1568,44 +1581,146 @@ async function loadProviders() {
   sel.appendChild(custom);
 }
 
-async function openAdminLLMEditor() {
-  try {
-    await loadProviders();
-    const cfg = await api("/api/admin/llm-config");
-    const curUrl = cfg.base_url || "";
-    const matched = providersCache.find(p => p.base_url === curUrl);
-    $("adminProvider").value = matched ? matched.id : "custom";
-    onAdminProviderChange();
-    $("adminBaseUrl").value = curUrl;
-    $("adminTimeout").value = cfg.timeout || "180";
-    $("adminApiKey").value = "";
-    $("adminApiKey").placeholder = cfg.api_key.configured
-      ? `已配置（${cfg.api_key.masked}），留空不修改`
-      : "输入 API Key";
-    if (cfg.model) fillModels($("adminModel"), [cfg.model], false);
-    else if (matched) fillModels($("adminModel"), matched.models, false);
-    $("adminLLMStatus2").textContent = "";
-  } catch (e) {
-    alert("读取配置失败：" + e.message);
-  }
-}
-
 function onAdminProviderChange() {
   const pid = $("adminProvider").value;
   const p = providersCache.find(x => x.id === pid);
   if (p) $("adminBaseUrl").value = p.base_url;
 }
 
+// ---------- 供应商列表 ----------
+async function loadAdminProviders() {
+  const box = $("adminProviderList");
+  try {
+    const r = await api("/api/admin/llm-providers");
+    const list = r.providers || [];
+    if (!list.length) {
+      box.innerHTML = '<p class="hint">还没有添加任何 API，点上方「＋ 添加 API」开始。</p>';
+      return;
+    }
+    box.innerHTML = "";
+    list.forEach(p => {
+      const card = document.createElement("div");
+      card.className = "provider-card";
+      card.innerHTML = `
+        <div class="provider-head">
+          <span class="provider-name">${escapeHtml(p.name)}</span>
+          <button class="mini-btn toggle-btn ${p.enabled ? "on" : "off"}" data-id="${p.id}">${p.enabled ? "🟢 已启用" : "⚪ 已停用"}</button>
+        </div>
+        <div class="provider-meta">
+          <div>接口：<code>${escapeHtml(p.base_url)}</code></div>
+          <div>默认模型：<code>${escapeHtml(p.model || "—")}</code> ｜ Key：${p.key.configured ? p.key.masked : "未配置"} ｜ 模型表：${p.models.length ? p.models.join("、") : "未维护"}</div>
+        </div>
+        <div class="provider-actions">
+          <button class="mini-btn test-btn" data-act="test" data-id="${p.id}">🧪 测试连接</button>
+          <button class="mini-btn" data-act="edit" data-id="${p.id}">✏️ 编辑</button>
+          <button class="mini-btn danger-btn" data-act="del" data-id="${p.id}">🗑 删除</button>
+        </div>`;
+      card.querySelector('[data-act="test"]').onclick = () => adminTestProvider(p);
+      card.querySelector('[data-act="edit"]').onclick = () => adminOpenForm(p);
+      card.querySelector('[data-act="del"]').onclick = () => adminDeleteProvider(p);
+      card.querySelector(".toggle-btn").onclick = () => adminToggleProvider(p);
+      box.appendChild(card);
+    });
+  } catch (e) {
+    box.innerHTML = `<p class="hint">加载失败：${escapeHtml(e.message)}</p>`;
+  }
+}
+
+async function adminToggleProvider(p) {
+  try {
+    await api(`/api/admin/llm-providers/${p.id}`, "PUT", { enabled: !p.enabled });
+    loadAdminProviders();
+  } catch (e) { showToast("操作失败：" + e.message, "error"); }
+}
+
+async function adminTestProvider(p) {
+  const btn = $("adminLLMStatus2");
+  btn.textContent = `⏳ 正在测试 ${p.name}…`;
+  try {
+    const r = await api(`/api/admin/llm-providers/${p.id}/test`, "POST", {});
+    if (r.ok) {
+      btn.textContent = `✅ ${p.name} 连接成功（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} 回复：${r.reply || ""}`;
+    } else {
+      btn.textContent = `❌ ${p.name} 测试失败（${r.latency_ms}ms）${r.error || ""}`;
+    }
+  } catch (e) { btn.textContent = "❌ " + e.message; }
+}
+
+async function adminDeleteProvider(p) {
+  askConfirm(`确定删除供应商「${p.name}」？\n删除后该 Key 将不可恢复。`, async () => {
+    try {
+      await api(`/api/admin/llm-providers/${p.id}`, "DELETE");
+      showToast("已删除 " + p.name, "success");
+      loadAdminProviders();
+    } catch (e) { showToast("删除失败：" + e.message, "error"); }
+  });
+}
+
+// ---------- 添加/编辑表单 ----------
+let adminEditId = null;
+async function adminOpenForm(p) {
+  adminEditId = p ? p.id : null;
+  $("adminFormTitle").textContent = p ? `编辑：${p.name}` : "添加 API";
+  $("adminProviderForm").classList.remove("hidden");
+  $("adminLLMStatus2").textContent = "";
+  await loadProviders();
+  if (p) {
+    const curUrl = p.base_url || "";
+    const matched = providersCache.find(x => x.base_url === curUrl);
+    $("adminPName").value = p.name || "";
+    $("adminProvider").value = matched ? matched.id : "custom";
+    onAdminProviderChange();
+    $("adminBaseUrl").value = curUrl;
+    $("adminApiKey").value = "";
+    $("adminApiKey").placeholder = p.key.configured ? `已配置（${p.key.masked}），留空不修改` : "输入 API Key";
+    $("adminModel").value = p.model || "";
+    $("adminTimeout").value = p.timeout || "180";
+    fillModelDatalist(p.models || []);
+  } else {
+    $("adminPName").value = "";
+    $("adminProvider").value = "deepseek";
+    onAdminProviderChange();
+    $("adminBaseUrl").value = (providersCache.find(x => x.id === "deepseek") || {}).base_url || "";
+    $("adminApiKey").value = "";
+    $("adminApiKey").placeholder = "输入 API Key";
+    $("adminModel").value = "";
+    $("adminTimeout").value = "180";
+    fillModelDatalist([]);
+  }
+}
+
+function adminFormClose() {
+  $("adminProviderForm").classList.add("hidden");
+  $("adminLLMStatus2").textContent = "";
+  adminEditId = null;
+}
+
+function fillModelDatalist(models) {
+  const dl = $("adminModelList");
+  dl.innerHTML = "";
+  (models || []).forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m;
+    dl.appendChild(opt);
+  });
+}
+
 async function adminFetchModels() {
-  const baseUrl = $("adminBaseUrl").value.trim();
-  const apiKey = $("adminApiKey").value.trim();
-  if (!baseUrl) { $("adminLLMStatus2").textContent = "❌ 请先填写接口地址"; return; }
   $("adminLLMStatus2").textContent = "⏳ 正在拉取模型列表…";
   try {
-    const r = await api("/api/admin/llm-models", "POST", { base_url: baseUrl, api_key: apiKey });
-    if (r.models && r.models.length) {
-      fillModels($("adminModel"), r.models, true);
-      $("adminLLMStatus2").textContent = `✅ 已获取 ${r.models.length} 个模型${r.error ? "（" + r.error + "）" : ""}`;
+    let r;
+    if (adminEditId) {
+      r = await api(`/api/admin/llm-providers/${adminEditId}/models`, "POST", {});
+    } else {
+      const baseUrl = $("adminBaseUrl").value.trim();
+      const apiKey = $("adminApiKey").value.trim();
+      if (!baseUrl) { $("adminLLMStatus2").textContent = "❌ 请先填写接口地址"; return; }
+      r = await api("/api/admin/llm-models", "POST", { base_url: baseUrl, api_key: apiKey });
+    }
+    if (r.source === "live" && r.models.length) {
+      fillModelDatalist(r.models);
+      if (!$("adminModel").value) $("adminModel").value = r.models[0];
+      $("adminLLMStatus2").textContent = `✅ 已获取 ${r.models.length} 个模型，点击输入框可下拉选择`;
     } else {
       $("adminLLMStatus2").textContent = "⚠️ " + (r.error || "未获取到模型");
     }
@@ -1614,62 +1729,30 @@ async function adminFetchModels() {
   }
 }
 
-async function adminTestLLM() {
-  // 表单未打开时：用当前已保存配置测试（Key 由服务端提供）
-  let baseUrl = $("adminBaseUrl").value.trim();
-  let model = $("adminModel").value;
-  if (!baseUrl || !model) {
-    try {
-      const cfg = await api("/api/admin/llm-config");
-      baseUrl = cfg.base_url || "";
-      model = cfg.model || "";
-    } catch (e) { /* 读取失败走下方报错 */ }
-  }
-  if (!baseUrl || !model) { $("adminLLMStatus2").textContent = "❌ 请先配置接口地址并选择模型"; return; }
-  $("adminLLMStatus2").textContent = "⏳ 正在测试连接…";
+async function adminSaveProvider() {
+  const name = $("adminPName").value.trim();
+  const baseUrl = $("adminBaseUrl").value.trim();
+  const apiKey = $("adminApiKey").value.trim();
+  const model = $("adminModel").value.trim();
+  const timeout = $("adminTimeout").value.trim() || "180";
+  if (!name) { $("adminLLMStatus2").textContent = "❌ 请填写名称"; return; }
+  if (!baseUrl) { $("adminLLMStatus2").textContent = "❌ 请填写接口地址"; return; }
+  if (!model) { $("adminLLMStatus2").textContent = "❌ 请填写默认模型"; return; }
+  if (!adminEditId && !apiKey) { $("adminLLMStatus2").textContent = "❌ 请填写 API Key"; return; }
+  const body = { name, base_url: baseUrl, model, timeout, api_key: apiKey };
   try {
-    const r = await api("/api/admin/llm-test", "POST",
-                        { base_url: baseUrl, api_key: $("adminApiKey").value.trim(), model: model });
-    if (r.ok) {
-      $("adminLLMStatus2").textContent =
-        `✅ 连接成功（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} 模型回复：${r.reply || ""}`;
+    if (adminEditId) {
+      await api(`/api/admin/llm-providers/${adminEditId}`, "PUT", body);
+      showToast("✅ 已保存修改", "success");
     } else {
-      $("adminLLMStatus2").textContent = `❌ 测试失败（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} ${r.error || ""}`;
+      await api("/api/admin/llm-providers", "POST", body);
+      showToast("✅ 已添加 " + name, "success");
     }
+    adminFormClose();
+    loadAdminProviders();
   } catch (e) {
     $("adminLLMStatus2").textContent = "❌ " + e.message;
   }
-}
-
-async function adminSaveLLM() {
-  const body = {
-    base_url: $("adminBaseUrl").value.trim() || null,
-    model: $("adminModel").value || null,
-    timeout: $("adminTimeout").value.trim() || null,
-    api_key: $("adminApiKey").value.trim() || null,
-  };
-  try {
-    const r = await api("/api/admin/llm-config", "POST", body);
-    showToast(`✅ LLM 配置已保存，模型：${r.model}`, "success");
-    $("adminApiKey").value = "";
-    $("adminLLMForm").classList.add("hidden");
-    loadAdminLLMStatus();
-  } catch (e) {
-    $("adminLLMStatus2").textContent = "❌ " + e.message;
-  }
-}
-
-async function adminClearKey() {
-  askConfirm("确定清除已保存的 API Key？\n\n清除后系统将无法调用 LLM，需重新配置。", async () => {
-  try {
-    await api("/api/admin/llm-config", "POST", { api_key: "" });
-    showToast("🗑 API Key 已清除", "success");
-    $("adminApiKey").value = "";
-    loadAdminLLMStatus();
-  } catch (e) {
-    showToast("清除失败：" + e.message, "error");
-  }
-  });
 }
 
 async function genInvite() {
@@ -1776,11 +1859,18 @@ async function init() {
   $("btnGenInvite").onclick = genInvite;
   $("adminProvider").addEventListener("change", onAdminProviderChange);
   $("btnAdminFetchModels").onclick = adminFetchModels;
-  $("btnAdminTestLLM").onclick = adminTestLLM;
-  $("btnAdminSaveLLM").onclick = adminSaveLLM;
-  $("btnAdminEditLLM").onclick = () => { $("adminLLMForm").classList.remove("hidden"); openAdminLLMEditor(); };
-  $("btnAdminCancelLLM").onclick = () => { $("adminLLMForm").classList.add("hidden"); $("adminLLMStatus2").textContent = ""; };
-  $("btnAdminClearKey").onclick = adminClearKey;
+  $("btnAdminAddProvider").onclick = () => adminOpenForm(null);
+  $("btnAdminFormClose").onclick = adminFormClose;
+  $("btnAdminSaveLLM").onclick = adminSaveProvider;
+  // 用户侧模型选择
+  $("modelSelect").addEventListener("change", async (e) => {
+    if (!sessionId || e.target.value === "__loading__") return;
+    try {
+      await api(`/api/session/${sessionId}/model`, "PUT",
+                { provider_id: e.target.value ? Number(e.target.value) : null });
+      showToast("✅ 已切换模型", "success");
+    } catch (err) { showToast("切换失败：" + err.message, "error"); }
+  });
   // 系统确认弹层
   $("btnConfirmYes").onclick = () => { $("confirmModal").classList.add("hidden"); if (confirmCb) { const cb = confirmCb; confirmCb = null; cb(); } };
   $("btnConfirmNo").onclick = () => { $("confirmModal").classList.add("hidden"); confirmCb = null; };

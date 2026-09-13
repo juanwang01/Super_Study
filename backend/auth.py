@@ -71,6 +71,17 @@ def _init_db() -> None:
                 chars INTEGER DEFAULT 0,
                 PRIMARY KEY (user_id, day)
             );
+            CREATE TABLE IF NOT EXISTS llm_providers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                base_url TEXT NOT NULL,
+                api_key TEXT NOT NULL,
+                model TEXT NOT NULL DEFAULT '',
+                models TEXT NOT NULL DEFAULT '[]',
+                timeout INTEGER NOT NULL DEFAULT 180,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at REAL NOT NULL
+            );
             """
         )
         # 首次启动自动创建 admin
@@ -81,6 +92,13 @@ def _init_db() -> None:
                 ("admin", _DEFAULT_ADMIN_USER, hash_password(_DEFAULT_ADMIN_PASS),
                  "admin", time.time()),
             )
+
+    # 迁移旧单配置 → 多供应商表（表空且有 .env key 时）
+    try:
+        from core.provider_manager import migrate_legacy_env
+        migrate_legacy_env()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

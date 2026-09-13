@@ -374,10 +374,21 @@ def build_system_prompt(session: Session | None = None) -> str:
 # ---------------------------------------------------------------------------
 # LLM 调用
 # ---------------------------------------------------------------------------
-def _chat_completion(messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> dict[str, Any]:
-    cfg = get_llm_config()
-    if not cfg["api_key"]:
-        raise RuntimeError("未配置 LLM API Key（可在系统设置中填写，或设置环境变量 LEARN_LLM_API_KEY）。")
+def _resolve_provider(session: Session | None) -> dict[str, Any]:
+    """按会话选择 LLM 供应商：会话指定 → 兜底第一个启用。无可用供应商时抛错。"""
+    from core import provider_manager as prov
+    pid = getattr(session, "model_provider", None) if session else None
+    cfg = prov.get_provider(pid) if pid is not None else None
+    if cfg is None or not cfg["enabled"]:
+        cfg = prov.first_enabled()
+    if cfg is None or not cfg.get("api_key"):
+        raise RuntimeError("系统尚未配置可用的 LLM 接口，请联系管理员。")
+    return cfg
+
+
+def _chat_completion(messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None,
+                     session: Session | None = None) -> dict[str, Any]:
+    cfg = _resolve_provider(session)
 
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
     payload: dict[str, Any] = {
@@ -428,7 +439,7 @@ def run_conversation(session: Session, user_message: str) -> dict[str, Any]:
 
     for _round in range(12):  # 工具循环上限，防死循环
         try:
-            data = _chat_completion(messages, TOOLS)
+            data = _chat_completion(messages, TOOLS, session=session)
         except Exception as e:
             return {"error": f"LLM 调用失败：{e}", "tool_events": tool_events}
 

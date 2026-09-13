@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Probe‑Plan‑Teach 超级学习系统</title>
 <link rel="stylesheet" href="/static/vendor/vditor/index.css">
-<link rel="stylesheet" href="/static/style.css?v=3">
+<link rel="stylesheet" href="/static/style.css?v=5">
 </head>
 <body>
   <!-- ========== 登录 / 注册视图 ========== -->
@@ -191,6 +191,9 @@
             <button id="btnThreadSelect" class="thread-select" title="切换会话">💬 <span id="threadName">默认会话</span> <span class="caret">▾</span></button>
             <button id="btnNewThread" class="mini-btn" title="新建会话">＋ 新会话</button>
             <div id="threadDropdown" class="thread-dropdown hidden"></div>
+            <select id="modelSelect" class="model-select" title="切换当前会话使用的模型">
+              <option value="">加载模型…</option>
+            </select>
           </div>
           <div id="chatMessages" class="chat-messages"></div>
           <div class="chat-input-wrap">
@@ -336,30 +339,38 @@
         <button id="adminTabUsers" class="admin-tab">用户</button>
       </div>
 
-      <!-- Tab：LLM 接口 -->
+      <!-- Tab：LLM 接口（多供应商管理） -->
       <div id="adminPaneLLM" class="admin-pane">
-        <div class="admin-llm-card">
-          <div id="adminLLMStatus" class="admin-status">加载中…</div>
-          <div class="admin-llm-actions">
-            <button id="btnAdminEditLLM" class="mini-btn">✏️ 编辑配置</button>
-            <button id="btnAdminTestLLM" class="mini-btn test-btn">🧪 测试连接</button>
-            <button id="btnAdminClearKey" class="mini-btn danger-btn">🗑 清除 Key</button>
-          </div>
+        <div class="admin-llm-toolbar">
+          <button id="btnAdminAddProvider" class="mini-btn">＋ 添加 API</button>
+          <span class="hint">多个供应商集中管理；普通用户只能看到你添加的模型（看不到 Key）。</span>
         </div>
-        <div id="adminLLMForm" class="admin-llm-form hidden">
+        <div id="adminProviderList" class="provider-list">加载中…</div>
+
+        <div id="adminProviderForm" class="admin-llm-form hidden">
+          <div class="form-head">
+            <span id="adminFormTitle">添加 API</span>
+            <button id="btnAdminFormClose" class="mini-btn">✕</button>
+          </div>
+          <label>名称（如 DeepSeek / 硅基流动）</label>
+          <input id="adminPName" type="text" placeholder="DeepSeek">
           <label>算力服务商（选择后自动填好接口地址）</label>
           <select id="adminProvider"><option value="">加载中…</option></select>
           <label>接口地址（OpenAI 兼容，可手动改）</label>
           <input id="adminBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" autocomplete="off">
-          <label>API Key（仅保存在服务端，不显示明文；留空=不修改）</label>
+          <label>API Key（仅保存在服务端；编辑时留空=不修改）</label>
           <input id="adminApiKey" type="password" placeholder="输入 API Key" autocomplete="off">
-          <label>模型 <button id="btnAdminFetchModels" class="mini-btn" type="button">🔄 拉取该服务商模型</button></label>
-          <select id="adminModel"></select>
+          <label>默认模型</label>
+          <input id="adminModel" type="text" placeholder="deepseek-chat" list="adminModelList">
+          <datalist id="adminModelList"></datalist>
+          <div class="model-actions">
+            <button id="btnAdminFetchModels" class="mini-btn" type="button">🔄 拉取该服务商模型列表</button>
+            <span id="adminModelHint" class="hint"></span>
+          </div>
           <label>超时秒数（默认 180）</label>
           <input id="adminTimeout" type="text" placeholder="180" autocomplete="off">
-          <div style="margin-top:10px">
+          <div class="form-actions">
             <button id="btnAdminSaveLLM" class="mini-btn">💾 保存</button>
-            <button id="btnAdminCancelLLM" class="mini-btn">✕ 取消</button>
             <span id="adminLLMStatus2" class="hint"></span>
           </div>
         </div>
@@ -413,6 +424,6 @@
   <input id="fileInput" type="file" accept=".epub,.pdf,.docx,.doc,.txt,.md,.markdown,.html,.htm,.pptx,.xlsx,.xls,.csv" class="hidden">
 
 <script src="/static/vendor/vditor/index.min.js"></script>
-<script src="/static/app.js?v=3"></script>
+<script src="/static/app.js?v=5"></script>
 </body>
 </html>

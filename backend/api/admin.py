@@ -95,24 +95,6 @@ PROVIDERS: list[dict] = [
 ]
 
 
-class LLMConfigBody(BaseModel):
-    base_url: str | None = None
-    api_key: str | None = None
-    model: str | None = None
-    timeout: str | None = None
-
-
-class ModelsBody(BaseModel):
-    base_url: str
-    api_key: str = ""
-
-
-class LLMTestBody(BaseModel):
-    base_url: str
-    api_key: str = ""
-    model: str = ""
-
-
 def _mask_key(key: str) -> dict[str, bool | str]:
     if not key:
         return {"configured": False, "masked": ""}
@@ -120,36 +102,117 @@ def _mask_key(key: str) -> dict[str, bool | str]:
     return {"configured": True, "masked": f"****{tail}"}
 
 
-@router.get("/llm-providers")
-def get_providers(admin: dict = Depends(require_admin)):
-    """返回预置算力服务商列表（不含任何 Key）。"""
+class ProviderBody(BaseModel):
+    name: str | None = None
+    base_url: str | None = None
+    api_key: str = ""
+    model: str = ""
+    models: list[str] = []
+    timeout: int | None = None
+    enabled: bool | None = None
+
+
+class ModelsBody(BaseModel):
+    base_url: str = ""
+    api_key: str = ""
+
+
+class ProviderTestBody(BaseModel):
+    model: str = ""
+    api_key: str = ""
+
+
+def _provider_view(p: dict) -> dict:
+    from core import provider_manager as prov
+    return {
+        "id": p["id"],
+        "name": p["name"],
+        "base_url": p["base_url"],
+        "model": p["model"],
+        "models": p["models"],
+        "timeout": p["timeout"],
+        "enabled": p["enabled"],
+        "created_at": p["created_at"],
+        "key": _mask_key(p["api_key"]),
+    }
+
+
+@router.get("/llm-presets")
+def get_presets(admin: dict = Depends(require_admin)):
+    """预置算力服务商（前端选择用，不含任何 Key）。"""
     return {"providers": PROVIDERS}
 
 
-@router.post("/llm-models")
-async def fetch_models(body: ModelsBody, admin: dict = Depends(require_admin)):
-    """用给定 base_url + api_key 拉取该服务商真实模型列表（调 /models）。
+@router.get("/llm-providers")
+def list_providers(admin: dict = Depends(require_admin)):
+    """管理端：全部 LLM 供应商（Key 掩码）。"""
+    from core import provider_manager as prov
+    return {"providers": [_provider_view(p) for p in prov.list_providers()]}
 
-    api_key 为空时使用服务端已保存的 Key。Key 不做任何存储。失败时返回预置模型表或错误信息。
-    """
+
+@router.post("/llm-providers")
+def add_provider(body: ProviderBody, admin: dict = Depends(require_admin)):
+    from core import provider_manager as prov
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=400, detail="请填写供应商名称")
+    if not (body.base_url or "").strip():
+        raise HTTPException(status_code=400, detail="请填写接口地址")
+    if not (body.api_key or "").strip():
+        raise HTTPException(status_code=400, detail="请填写 API Key")
+    if not (body.model or "").strip():
+        raise HTTPException(status_code=400, detail="请填写默认模型")
+    try:
+        p = prov.add_provider(
+            name=body.name, base_url=body.base_url, api_key=body.api_key,
+            model=body.model, models=body.models or [],
+            timeout=body.timeout or 180)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"保存失败：{e}")
+    return {"saved": True, "provider": _provider_view(p)}
+
+
+@router.put("/llm-providers/{provider_id}")
+def update_provider(provider_id: int, body: ProviderBody,
+                    admin: dict = Depends(require_admin)):
+    """修改供应商。api_key 留空 = 不修改；models 传空列表 = 清空模型表。"""
+    from core import provider_manager as prov
+    p = prov.update_provider(
+        provider_id,
+        name=(body.name.strip() if body.name else None),
+        base_url=(body.base_url.strip() if body.base_url else None),
+        api_key=body.api_key,
+        model=(body.model.strip() if body.model else None),
+        models=body.models if body.models is not None else None,
+        timeout=body.timeout,
+        enabled=body.enabled,
+    )
+    if p is None:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    return {"saved": True, "provider": _provider_view(p)}
+
+
+@router.delete("/llm-providers/{provider_id}")
+def delete_provider(provider_id: int, admin: dict = Depends(require_admin)):
+    from core import provider_manager as prov
+    if not prov.delete_provider(provider_id):
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    return {"deleted": True}
+
+
+@router.post("/llm-models")
+async def fetch_models_by_form(body: ModelsBody, admin: dict = Depends(require_admin)):
+    """新增供应商时：用表单填写的 base_url + api_key 拉取其模型列表（Key 仅本次使用）。"""
     base_url = (body.base_url or "").rstrip("/")
     if not base_url:
         raise HTTPException(status_code=400, detail="接口地址不能为空")
-    api_key = (body.api_key or "").strip() or get_llm_config()["api_key"]
-
-    # 先匹配预置服务商，失败时至少能给出候选模型
-    preset = next((p for p in PROVIDERS if p["base_url"].rstrip("/") == base_url), None)
-    fallback_models = preset["models"] if preset else []
-
+    api_key = (body.api_key or "").strip()
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-
     client_kwargs = {"timeout": 20}
     proxy = get_http_proxy()
     if proxy:
         client_kwargs["proxy"] = proxy
-
     try:
         async with httpx.AsyncClient(**client_kwargs) as client:
             resp = await client.get(base_url + "/models", headers=headers)
@@ -158,54 +221,79 @@ async def fetch_models(body: ModelsBody, admin: dict = Depends(require_admin)):
                 ids = [m.get("id") for m in data.get("data", []) if m.get("id")]
                 if ids:
                     return {"source": "live", "models": ids}
-            # 401/403 说明 Key 无效
             if resp.status_code in (401, 403):
-                return {"source": "error",
-                        "error": "API Key 无效或无权限（HTTP " + str(resp.status_code) + "），请检查后重试。",
-                        "models": fallback_models}
-            if resp.status_code == 404:
-                return {"source": "unsupported",
-                        "error": "该服务商不支持模型列表接口，请从预置模型中选择。",
-                        "models": fallback_models}
-            return {"source": "error",
-                    "error": f"获取模型失败（HTTP {resp.status_code}）",
-                    "models": fallback_models}
+                return {"source": "error", "error": f"API Key 无效或无权限（HTTP {resp.status_code}）", "models": []}
+            return {"source": "error", "error": f"获取模型失败（HTTP {resp.status_code}）", "models": []}
     except Exception as e:
-        return {"source": "error",
-                "error": f"无法连接该服务商：{e}",
-                "models": fallback_models}
+        return {"source": "error", "error": f"无法连接该服务商：{e}", "models": []}
 
 
-@router.post("/llm-test")
-async def test_llm(body: LLMTestBody, admin: dict = Depends(require_admin)):
-    """连接测试：用当前填写的地址/Key/模型发一个最小请求，返回延迟与结果。
-
-    Key 为空时使用服务端已保存的 Key。只用于本次测试，不做存储。
-    """
-    base_url = (body.base_url or "").rstrip("/")
-    model = (body.model or "").strip()
-    if not base_url:
-        raise HTTPException(status_code=400, detail="接口地址不能为空")
-    if not model:
-        raise HTTPException(status_code=400, detail="请先选择模型")
-    api_key = (body.api_key or "").strip() or get_llm_config()["api_key"]
-
+@router.post("/llm-providers/{provider_id}/models")
+async def fetch_provider_models(provider_id: int, body: ProviderTestBody,
+                                admin: dict = Depends(require_admin)):
+    """用该供应商已存 Key 拉取其真实模型列表（调 /models）。"""
+    from core import provider_manager as prov
+    p = prov.get_provider(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    base_url = (p["base_url"] or "").rstrip("/")
+    api_key = (body.api_key or "").strip() or p["api_key"]
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    client_kwargs = {"timeout": 20}
+    proxy = get_http_proxy()
+    if proxy:
+        client_kwargs["proxy"] = proxy
+    fallback = p["models"]
+    try:
+        async with httpx.AsyncClient(**client_kwargs) as client:
+            resp = await client.get(base_url + "/models", headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                ids = [m.get("id") for m in data.get("data", []) if m.get("id")]
+                if ids:
+                    return {"source": "live", "models": ids}
+            if resp.status_code in (401, 403):
+                return {"source": "error",
+                        "error": f"API Key 无效或无权限（HTTP {resp.status_code}），请检查后重试。",
+                        "models": fallback}
+            if resp.status_code == 404:
+                return {"source": "unsupported",
+                        "error": "该服务商不支持模型列表接口，可手动维护模型表。",
+                        "models": fallback}
+            return {"source": "error", "error": f"获取模型失败（HTTP {resp.status_code}）",
+                    "models": fallback}
+    except Exception as e:
+        return {"source": "error", "error": f"无法连接该服务商：{e}", "models": fallback}
 
+
+@router.post("/llm-providers/{provider_id}/test")
+async def test_provider(provider_id: int, body: ProviderTestBody,
+                        admin: dict = Depends(require_admin)):
+    """连接测试：用该供应商已存 Key + 指定模型（空则默认模型）发最小请求。"""
+    from core import provider_manager as prov
+    p = prov.get_provider(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    base_url = (p["base_url"] or "").rstrip("/")
+    model = (body.model or "").strip() or (p["model"] or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="该供应商未设置模型，请先编辑补充")
+    api_key = (body.api_key or "").strip() or p["api_key"]
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     client_kwargs = {"timeout": 30}
     proxy = get_http_proxy()
     if proxy:
         client_kwargs["proxy"] = proxy
-
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": "回复两个字：正常"}],
         "max_tokens": 16,
         "temperature": 0,
     }
-
     import time
     t0 = time.time()
     try:
@@ -232,33 +320,3 @@ async def test_llm(body: LLMTestBody, admin: dict = Depends(require_admin)):
                 "error": f"无法连接：{e}", "proxy": bool(proxy)}
 
 
-@router.get("/llm-config")
-def get_llm_config_api(admin: dict = Depends(require_admin)):
-    cfg = get_llm_config()
-    return {
-        "base_url": cfg["base_url"],
-        "model": cfg["model"],
-        "timeout": cfg["timeout"],
-        "api_key": _mask_key(cfg["api_key"]),
-    }
-
-
-@router.post("/llm-config")
-def set_llm_config_api(body: LLMConfigBody, admin: dict = Depends(require_admin)):
-    try:
-        cfg = save_llm_config(
-            base_url=body.base_url,
-            api_key=body.api_key,
-            model=body.model,
-            timeout=body.timeout,
-        )
-    except OSError as e:
-        raise HTTPException(status_code=500, detail=f"配置文件写入失败：{e}")
-    return {
-        "saved": True,
-        "base_url": cfg["base_url"],
-        "model": cfg["model"],
-        "timeout": cfg["timeout"],
-        "api_key": _mask_key(cfg["api_key"]),
-        "note": "配置已保存到服务端 .env 文件，立即生效。",
-    }

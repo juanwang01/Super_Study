@@ -14,6 +14,22 @@ from core.session_manager import session_manager
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
+@router.get("/llm/options")
+def llm_options(user: dict = Depends(get_current_user)):
+    """普通用户可见的模型选项：只含启用供应商的「供应商名 + 模型」，绝不含 Key。"""
+    from core import provider_manager as prov
+    options: list[dict] = []
+    for p in prov.list_providers(include_disabled=False):
+        if not (p["model"] or "").strip():
+            continue
+        options.append({
+            "provider_id": p["id"],
+            "provider_name": p["name"],
+            "model": p["model"],
+            "models": p["models"],
+        })
+    return {"options": options}
+
 def _session_owner(session_id: str, user: dict):
     """会话归属校验：只能操作自己的会话。"""
     s = session_manager.get_session(session_id)
@@ -41,6 +57,10 @@ class MessageBody(BaseModel):
 
 class ThreadNameBody(BaseModel):
     name: str
+
+
+class ModelBody(BaseModel):
+    provider_id: int | None = None   # None = 回系统默认
 
 
 @router.post("")
@@ -76,6 +96,23 @@ def open_project(session_id: str, body: OpenProjectBody, user: dict = Depends(ge
         raise HTTPException(status_code=404, detail=str(e))
     ctx["guide"] = build_project_guide(ctx, is_new=False)
     return ctx
+
+
+@router.put("/{session_id}/model")
+def set_session_model(session_id: str, body: ModelBody,
+                      user: dict = Depends(get_current_user)):
+    """切换当前会话使用的 LLM 模型（用户侧：只传供应商 id，永远接触不到 Key）。"""
+    s = _session_owner(session_id, user)
+    from core import provider_manager as prov
+    if body.provider_id is not None:
+        p = prov.get_provider(body.provider_id)
+        if p is None:
+            raise HTTPException(status_code=404, detail="模型不存在")
+        if not p["enabled"]:
+            raise HTTPException(status_code=403, detail="该模型已被管理员停用")
+    s.model_provider = body.provider_id
+    s.touch()
+    return {"provider_id": s.model_provider}
 
 
 @router.post("/{session_id}/close")

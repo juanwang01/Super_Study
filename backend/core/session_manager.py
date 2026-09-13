@@ -28,6 +28,7 @@ class Session:
         self.snapshot_mtime: float | None = None    # 加载快照时的磁盘 mtime（并发检测）
         self.messages: list[dict[str, Any]] = []    # 本会话与 LLM 的对话历史
         self.current_thread: str | None = None      # 项目内会话（线程）id
+        self.model_provider: int | None = None      # 当前使用的 LLM 供应商 id（None=系统默认）
         self.created_at: float = time.time()
         self.updated_at: float = time.time()
         self._lock = threading.Lock()
@@ -93,6 +94,7 @@ class SessionManager:
             "thread_id": session.current_thread,
             "thread_name": thread["name"],
             "threads": pt.list_threads(project_id),
+            "model_provider": session.model_provider,
         }
 
     def _persist_thread(self, session: Session) -> None:
