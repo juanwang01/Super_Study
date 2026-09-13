@@ -96,11 +96,21 @@ function inlineMd(s) {
 const API_BASE = (typeof window !== "undefined" && window.API_BASE)
   ? String(window.API_BASE).replace(/\/+$/, "") : "";
 
-async function api(path, method = "GET", body = null) {
+async function api(path, method = "GET", body = null, timeoutMs = 60000) {
   const opt = { method, headers: { "Content-Type": "application/json" } };
   if (authToken) opt.headers["Authorization"] = "Bearer " + authToken;
   if (body) opt.body = JSON.stringify(body);
-  const resp = await fetch(API_BASE + path, opt);
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  opt.signal = ctl.signal;
+  let resp;
+  try {
+    resp = await fetch(API_BASE + path, opt);
+  } catch (e) {
+    clearTimeout(timer);
+    throw new Error(e && e.name === "AbortError" ? "请求超时，请重试" : (e && e.message || "网络错误"));
+  }
+  clearTimeout(timer);
   if (resp.status === 401 && !path.startsWith("/api/auth/")) {
     // 登录态失效 → 清空并回登录页
     logout(false);
@@ -769,7 +779,7 @@ async function createAndOpen(name, desc) {
     const data = await api("/api/projects", "POST", { project_name: name, description: desc });
     await openProject(data.project_id);
   } catch (e) {
-    alert("创建项目失败：" + e.message);
+    showToast("创建项目失败：" + e.message, "error");
   }
 }
 
@@ -1377,12 +1387,27 @@ function bindFileInputs() {
 // ---------------------------------------------------------------------------
 function bindTopbar() {
   let sidebarCollapsed = false;
-  $("btnToggleSidebar").onclick = () => {
-    sidebarCollapsed = !sidebarCollapsed;
-    $("sidebar").classList.toggle("collapsed", sidebarCollapsed);
-    $("btnToggleSidebar").textContent = sidebarCollapsed ? "⫸" : "⫷";
-    $("btnToggleSidebar").title = sidebarCollapsed ? "展开目录树" : "折叠目录树";
+  const closeSidebar = () => {
+    $("sidebar").classList.remove("open");
+    const m = $("sidebarMask");
+    if (m) m.classList.add("hidden");
   };
+  const maskEl = $("sidebarMask");
+  if (maskEl) maskEl.onclick = closeSidebar;
+  $("btnToggleSidebar").onclick = () => {
+    if (window.innerWidth <= 768) {
+      // 手机：左侧目录抽屉
+      const isOpen = $("sidebar").classList.toggle("open");
+      if (maskEl) maskEl.classList.toggle("hidden", !isOpen);
+    } else {
+      sidebarCollapsed = !sidebarCollapsed;
+      $("sidebar").classList.toggle("collapsed", sidebarCollapsed);
+      $("btnToggleSidebar").textContent = sidebarCollapsed ? "⫸" : "⫷";
+      $("btnToggleSidebar").title = sidebarCollapsed ? "展开目录树" : "折叠目录树";
+    }
+  };
+  // 手机端进入项目时默认收起抽屉
+  if (window.innerWidth <= 768) closeSidebar();
 
   $("btnBack").onclick = async () => {
     if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null; }

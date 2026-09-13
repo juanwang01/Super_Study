@@ -1,6 +1,7 @@
 """项目相关 API：列表 / 新建 / 详情 / 笔记 / 计划 / 素材 / 删除。"""
 from __future__ import annotations
 
+import time
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
@@ -386,10 +387,13 @@ def guide_material(project_id: str, user: dict = Depends(get_current_user)):
             "analysis_text": analysis,
         }
 
-    # 2) 需要资料 → 按缺口搜索（国内源优先，过滤反爬站）
+    # 2) 需要资料 → 按缺口搜索（国内源优先，过滤反爬站）；整体 15s 预算防卡
     seen: set[str] = set()
     results: list[dict] = []
+    _s0 = time.monotonic()
     for kw in (gap or topic, topic, f"{topic} 教程"):
+        if time.monotonic() - _s0 > 15:
+            break
         try:
             for r in ms.search_materials(kw)[:8]:
                 host = (r.get("url") or "").split("/")[2] if "//" in (r.get("url") or "") else ""

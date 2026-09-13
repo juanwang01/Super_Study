@@ -569,17 +569,27 @@ button:hover { background: var(--primary-dark); }
   .proj-title { gap: 8px; min-width: 0; }
   .proj-actions button { padding: 5px 9px; font-size: 12px; }
   .proj-body { flex-direction: column; height: auto; min-height: calc(100vh - 54px); }
+  /* 目录树 = 左侧抽屉：默认收起，点 ☰ 目录 滑出 */
   .sidebar {
-    width: 100% !important; min-width: 0 !important;
-    max-height: 38vh; border-right: none; border-bottom: 1px solid var(--border);
-    flex: none;
+    position: fixed; left: 0; top: 0; bottom: 0;
+    width: min(78vw, 300px) !important; min-width: 0 !important;
+    max-height: none !important; border-right: 1px solid var(--border); border-bottom: none;
+    flex: none; z-index: 55;
+    transform: translateX(-105%);
+    transition: transform .25s ease;
+    box-shadow: 0 0 24px rgba(15,23,42,.18);
+    background: var(--bg, #fff);
   }
-  .sidebar.collapsed { max-height: 0 !important; opacity: 0; }
-  .tree { max-height: 34vh; }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar.collapsed { max-height: none !important; opacity: 1; }
+  .tree { max-height: none; flex: 1; overflow-y: auto; }
+  .workspace { width: 100%; min-height: calc(100vh - 54px); }
+  /* 手机端不允许自定义笔记目录：隐藏设置入口 */
+  #btnNotesConfig, #btnSettings { display: none !important; }
   .tree-node { padding: 8px 6px 8px 18px; font-size: 14px; }
   .tree-btn { padding: 3px 8px; font-size: 12px; }
   .sidebar-footer { padding: 6px 10px; }
-  .workspace { min-height: 62vh; }
+  .workspace { min-height: calc(100vh - 54px); }
   .chat-messages { padding: 12px; }
   .msg .bubble { max-width: 92%; font-size: 15px; }
   .chat-input-wrap { padding: 8px 10px; gap: 8px; }
@@ -704,3 +714,12 @@ button:active { transform: scale(.97); }
 }
 .auth-btn:hover { background: linear-gradient(135deg, #2f6df0, #2555d4); box-shadow: 0 6px 18px rgba(51,112,255,.34); }
 #btnSend { border-radius: 12px; font-weight: 600; }
+
+/* 管理后台弹窗：固定高度，内容区滚动，避免 tab 切换弹窗忽高忽低 */
+#adminModal .modal-box { height: min(80vh, 700px); display: flex; flex-direction: column; }
+#adminModal .admin-pane { flex: 1; min-height: 0; overflow-y: auto; }
+@media (max-width: 768px) {
+  #adminModal .modal-box { height: min(76vh, 660px); }
+}
+/* 手机端左侧目录抽屉 */
+.sidebar-mask { position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 54; }

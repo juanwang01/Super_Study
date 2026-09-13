@@ -30,8 +30,8 @@ _BROWSER_HEADERS = {
 }
 
 
-def _client() -> httpx.Client:
-    kwargs: dict = {"timeout": TIMEOUT, "follow_redirects": True,
+def _client(timeout: float | None = None) -> httpx.Client:
+    kwargs: dict = {"timeout": timeout or TIMEOUT, "follow_redirects": True,
                     "headers": dict(_BROWSER_HEADERS)}
     proxy = get_http_proxy()
     if proxy:
@@ -160,14 +160,14 @@ def web_search(query: str, limit: int = 8) -> list[dict]:
 # 维基搜索
 # ---------------------------------------------------------------------------
 def _wiki_search(site: str, query: str, limit: int = 6) -> list[dict]:
-    """搜索维基站点，返回 [{title, snippet, url}]。"""
+    """搜索维基站点，返回 [{title, snippet, url}]。维基国内需代理，超时给短预算避免拖慢主流程。"""
     api = f"https://{site}/w/api.php"
     params = {
         "action": "query", "list": "search", "srsearch": query,
         "srlimit": str(limit), "format": "json",
         "utf8": "1",
     }
-    with _client() as c:
+    with _client(timeout=8) as c:
         r = c.get(api, params=params)
         r.raise_for_status()
         data = r.json()
@@ -188,7 +188,7 @@ def _wiki_search(site: str, query: str, limit: int = 6) -> list[dict]:
 
 
 def search_materials(query: str) -> list[dict]:
-    """多源搜索学习材料：优先国内可直连（Bing/百度），DuckDuckGo 补充；维基降为末尾补充（需代理）。"""
+    """多源搜索学习材料：优先国内可直连（Bing/百度），DuckDuckGo 兜底。"""
     results: list[dict] = []
     seen = set()
     try:
@@ -198,15 +198,6 @@ def search_materials(query: str) -> list[dict]:
                 results.append(item)
     except Exception:
         pass
-    # 维基补充（放在最后，国内环境需代理）
-    for site in ("zh.wikibooks.org", "zh.wikipedia.org"):
-        try:
-            for item in _wiki_search(site, query):
-                if item["title"] not in seen:
-                    seen.add(item["title"])
-                    results.append(item)
-        except Exception:
-            continue
     return results
 
 
