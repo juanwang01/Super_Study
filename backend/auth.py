@@ -71,6 +71,10 @@ def _init_db() -> None:
                 chars INTEGER DEFAULT 0,
                 PRIMARY KEY (user_id, day)
             );
+            CREATE TABLE IF NOT EXISTS projects (
+                project_id TEXT PRIMARY KEY,
+                owner TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS llm_providers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
