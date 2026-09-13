@@ -206,7 +206,7 @@ button:hover { background: var(--primary-dark); }
   padding: 16px 22px; border-bottom: 1px solid var(--border);
 }
 .modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
-.material-upload { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.material-upload { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
 .material-upload input, .material-upload textarea, .material-upload select {
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-family: inherit; font-size: 13px;
   background: #fff;
@@ -594,7 +594,9 @@ button:hover { background: var(--primary-dark); }
   }
   .modal-sm { max-width: 100vw; }
   .modal-head { padding: 12px 14px; }
-  .modal-body { padding: 16px 18px; }
+  .modal-body { padding: 20px 22px; }
+  .material-upload { padding: 16px 18px; gap: 10px; }
+  .modal-head { padding: 14px 18px; }
   .admin-llm-form .form-grid { grid-template-columns: 1fr; }
   .admin-llm-form .fcell.span2 { grid-column: span 1; }
   .admin-llm-toolbar { flex-wrap: wrap; }
@@ -622,6 +624,18 @@ button:hover { background: var(--primary-dark); }
   .material-upload { padding: 12px 14px; }
   .material-upload textarea { min-height: 60px; }
   .trash-item { flex-wrap: wrap; }
+  /* 弹窗内独立操作按钮全宽（修改密码/创建笔记/保存设置等），行内工具按钮除外 */
+  .modal .material-upload > div > button,
+  .modal .material-upload > button { width: 100%; padding: 13px; font-size: 15px; }
+  .modal .form-head-actions button, .modal .model-input-row button, .modal .form-actions button { width: auto; padding: 8px 14px; font-size: 13px; }
+  /* 管理后台 provider 卡片按钮行内不拉伸 */
+  .modal .provider-actions button, .modal .admin-llm-actions button { width: auto; }
+  /* 邀请码行按钮 */
+  .modal .invite-row .mini-btn { width: auto; margin-left: auto; }
+  /* admin 表单 head 操作行 */
+  .modal .admin-llm-form .form-head { flex-wrap: wrap; gap: 8px; }
+  /* 弹窗高度：底部抽屉最大 94vh，内容可滚动 */
+  .modal-box, .modal-box.wide { max-height: 94vh; }
 }
 
 
