@@ -775,14 +775,17 @@ async function openProject(projectId) {
   }
 }
 
-async function createAndOpen(name, desc) {
+async function createOnly(name, desc) {
+  // 只创建项目：列表出现后由用户手动点击进入（进入时才触发 AI 引导）
   const btn = $("btnCreateProject");
   const original = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "⏳ 创建中…"; }
   try {
-    const data = await api("/api/projects", "POST", { project_name: name, description: desc });
-    await openProject(data.project_id);
+    await api("/api/projects", "POST", { project_name: name, description: desc });
     if ($("newProjectName")) $("newProjectName").value = "";
+    if ($("newProjectDesc")) $("newProjectDesc").value = "";
+    await loadProjects();
+    showToast(`已创建「${name}」，点击项目卡片开始学习`, "success");
   } catch (e) {
     showToast("创建项目失败：" + e.message, "error");
   } finally {
@@ -2123,7 +2126,7 @@ async function init() {
     const name = $("newProjectName").value.trim();
     const desc = $("newProjectDesc").value.trim();
     if (!name) { showToast("请输入主题名称", "error"); return; }
-    createAndOpen(name, desc);
+    createOnly(name, desc);
   };
   $("newProjectName").addEventListener("keydown", (e) => {
     if (e.key === "Enter") $("btnCreateProject").click();
