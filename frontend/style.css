@@ -497,7 +497,11 @@ button:hover { background: var(--primary-dark); }
 .danger-btn { color: #d54941; border-color: #d54941; background: #fff; }
 .danger-btn:hover { background: #fff1f0; }
 .admin-llm-form { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
-.admin-llm-form label { display: block; margin: 10px 0 4px; font-size: 13px; font-weight: 600; }
+.admin-llm-form label { display: block; margin: 6px 0 3px; font-size: 12px; font-weight: 600; }
+.admin-llm-form input, .admin-llm-form select { padding: 6px 9px; font-size: 13px; }
+.admin-llm-form .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.admin-llm-form .fcell.span2 { grid-column: span 2; }
+.admin-llm-form .form-head { grid-column: span 2; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 
 /* ===== 确认弹层 ===== */
 .modal-sm { max-width: 380px; }
@@ -536,3 +540,10 @@ button:hover { background: var(--primary-dark); }
 .mini-btn.test-btn:disabled { opacity: .6; cursor: wait; }
 .mini-btn.test-btn.test-ok { color: #fff; background: #16a34a; border-color: #16a34a; }
 .mini-btn.test-btn.test-fail { color: #fff; background: #dc2626; border-color: #dc2626; }
+
+.field-label { font-weight: 600; }
+.required-star { color: #dc2626; }
+#adminProviderForm label:has(+ div .model-input-row), #adminProviderForm label:has(+ .model-input-row) { font-weight: 600; }
+#adminProviderForm .model-input-row select { border-color: var(--accent); background: #f8faff; font-weight: 500; }
+#adminLLMStatus2.ok { color: #16a34a; }
+#adminLLMStatus2.fail { color: #dc2626; }

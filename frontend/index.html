@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Probe‑Plan‑Teach 超级学习系统</title>
 <link rel="stylesheet" href="/static/vendor/vditor/index.css">
-<link rel="stylesheet" href="/static/style.css?v=10">
+<link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 <body>
   <!-- ========== 登录 / 注册视图 ========== -->
@@ -352,33 +352,50 @@
             <span id="adminFormTitle">添加 API</span>
             <div class="form-head-actions">
               <button id="btnAdminTestForm" class="mini-btn test-btn" type="button">🧪 测试连接</button>
-              <span id="adminTestStatus" class="test-status"></span>
               <button id="btnAdminSaveLLM" class="mini-btn">💾 保存</button>
               <button id="btnAdminFormClose" class="mini-btn">✕</button>
             </div>
           </div>
-          <label>名称（如 DeepSeek / 硅基流动）</label>
-          <input id="adminPName" type="text" placeholder="DeepSeek">
-          <label>算力服务商（选择后自动填好接口地址）</label>
-          <select id="adminProvider"><option value="">加载中…</option></select>
-          <label>接口地址（OpenAI 兼容，可手动改）</label>
-          <input id="adminBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" autocomplete="off">
-          <label>API Key（仅保存在服务端；编辑时留空=不修改）</label>
-          <input id="adminApiKey" type="password" placeholder="输入 API Key" autocomplete="off">
-          <label>默认模型</label>
-          <div class="model-input-row">
-            <select id="adminModel"><option value="">（先拉取模型或手动输入）</option></select>
-            <button id="btnModelManual" class="mini-btn" type="button">✏️ 手动输入</button>
-          </div>
-          <input id="adminModelCustom" type="text" class="hidden" placeholder="手动输入模型名，如 deepseek-chat" autocomplete="off">
-          <div class="model-actions">
-            <button id="btnAdminFetchModels" class="mini-btn" type="button">🔄 拉取该服务商模型列表</button>
-            <span id="adminModelHint" class="hint"></span>
-          </div>
-          <label>超时秒数（默认 180）</label>
-          <input id="adminTimeout" type="text" placeholder="180" autocomplete="off">
-          <div class="form-actions">
-            <span id="adminLLMStatus2" class="hint"></span>
+          <div class="form-grid">
+            <div class="fcell">
+              <label>名称（如 DeepSeek / 硅基流动）</label>
+              <input id="adminPName" type="text" placeholder="DeepSeek">
+            </div>
+            <div class="fcell">
+              <label>算力服务商（选择后自动填好接口地址）</label>
+              <select id="adminProvider"><option value="">加载中…</option></select>
+            </div>
+            <div class="fcell">
+              <label>接口地址（OpenAI 兼容，可手动改）</label>
+              <input id="adminBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" autocomplete="off">
+            </div>
+            <div class="fcell">
+              <label>API Key（仅存服务端；编辑留空=不修改）</label>
+              <input id="adminApiKey" type="password" placeholder="输入 API Key" autocomplete="off">
+            </div>
+            <div class="fcell">
+              <label class="field-label">默认模型 <span class="required-star">*</span></label>
+              <div class="model-input-row">
+                <select id="adminModel"><option value="">（先拉取模型或手动输入）</option></select>
+                <button id="btnModelManual" class="mini-btn" type="button">✏️ 手输</button>
+              </div>
+              <input id="adminModelCustom" type="text" class="hidden" placeholder="手动输入模型名，如 deepseek-chat" autocomplete="off">
+            </div>
+            <div class="fcell">
+              <label>超时秒数（默认 180）</label>
+              <input id="adminTimeout" type="text" placeholder="180" autocomplete="off">
+            </div>
+            <div class="fcell span2">
+              <div class="model-actions">
+                <button id="btnAdminFetchModels" class="mini-btn" type="button">🔄 拉取该服务商模型列表</button>
+                <span id="adminModelHint" class="hint"></span>
+              </div>
+            </div>
+            <div class="fcell span2">
+              <div class="form-actions">
+                <span id="adminLLMStatus2" class="hint"></span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -431,6 +448,6 @@
   <input id="fileInput" type="file" accept=".epub,.pdf,.docx,.doc,.txt,.md,.markdown,.html,.htm,.pptx,.xlsx,.xls,.csv" class="hidden">
 
 <script src="/static/vendor/vditor/index.min.js"></script>
-<script src="/static/app.js?v=10"></script>
+<script src="/static/app.js?v=12"></script>
 </body>
 </html>

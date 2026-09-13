@@ -1787,10 +1787,9 @@ function adminToggleModelInput() {
 }
 
 function setTestStatus(text, cls) {
-  const st = $("adminTestStatus");
+  const st = $("adminLLMStatus2");
   st.textContent = text;
-  st.className = "test-status" + (cls ? " " + cls : "");
-  if (text) $("adminLLMStatus2").textContent = text;
+  st.className = "hint" + (cls ? " " + cls : "");
 }
 
 async function runConnectionTest({ auto = false } = {}) {
