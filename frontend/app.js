@@ -146,6 +146,7 @@ async function showMainMenu() {
   badge.textContent = currentUser && currentUser.role === "admin" ? "管理员" : "用户";
   badge.className = "badge" + (currentUser && currentUser.role === "admin" ? " badge-admin" : "");
   $("btnAdminPanel").classList.toggle("hidden", !(currentUser && currentUser.role === "admin"));
+  $("btnChangePwd").classList.toggle("hidden", !currentUser);
   loadProjects();
 }
 
@@ -1644,7 +1645,7 @@ async function loadAdminProviders() {
           <button class="mini-btn" data-act="edit" data-id="${p.id}">✏️ 编辑</button>
           <button class="mini-btn danger-btn" data-act="del" data-id="${p.id}">🗑 删除</button>
         </div>`;
-      card.querySelector('[data-act="test"]').onclick = () => adminTestProvider(p);
+      card.querySelector('[data-act="test"]').onclick = (ev) => adminTestProvider(p, ev.currentTarget);
       card.querySelector('[data-act="edit"]').onclick = () => adminOpenForm(p);
       card.querySelector('[data-act="del"]').onclick = () => adminDeleteProvider(p);
       card.querySelector(".toggle-btn").onclick = () => adminToggleProvider(p);
@@ -1662,17 +1663,29 @@ async function adminToggleProvider(p) {
   } catch (e) { showToast("操作失败：" + e.message, "error"); }
 }
 
-async function adminTestProvider(p) {
-  const btn = $("adminLLMStatus2");
-  btn.textContent = `⏳ 正在测试 ${p.name}…`;
+async function adminTestProvider(p, el) {
+  const btn = el || $("adminLLMStatus2");
+  const origin = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = "⏳ 测试中…";
   try {
     const r = await api(`/api/admin/llm-providers/${p.id}/test`, "POST", {});
     if (r.ok) {
-      btn.textContent = `✅ ${p.name} 连接成功（${r.latency_ms}ms）${r.proxy ? "［经系统代理］" : ""} 回复：${r.reply || ""}`;
+      btn.innerHTML = "✅ 成功";
+      btn.classList.add("btn-ok");
+      showToast(`✅ ${p.name} 连接成功 ${r.latency_ms}ms${r.proxy ? "（经系统代理）" : ""} 回复：${r.reply || ""}`, "success");
     } else {
-      btn.textContent = `❌ ${p.name} 测试失败（${r.latency_ms}ms）${r.error || ""}`;
+      btn.innerHTML = "❌ 失败";
+      btn.classList.add("btn-err");
+      showToast(`❌ ${p.name} 测试失败 ${r.latency_ms}ms：${r.error || ""}`, "error");
     }
-  } catch (e) { btn.textContent = "❌ " + e.message; }
+  } catch (e) {
+    btn.innerHTML = "❌ 失败";
+    btn.classList.add("btn-err");
+    showToast("❌ " + e.message, "error");
+  } finally {
+    setTimeout(() => { btn.disabled = false; btn.innerHTML = origin; btn.classList.remove("btn-ok", "btn-err"); }, 3000);
+  }
 }
 
 async function adminDeleteProvider(p) {
@@ -1985,6 +1998,24 @@ async function init() {
   };
   $("btnLogout").onclick = () => logout();
   $("btnAdminPanel").onclick = () => showAdminPanel();
+  $("btnChangePwd").onclick = () => {
+    $("pwdOld").value = ""; $("pwdNew").value = ""; $("pwdNew2").value = "";
+    $("pwdStatus").textContent = "";
+    $("pwdModal").classList.remove("hidden");
+  };
+  $("btnClosePwd").onclick = () => $("pwdModal").classList.add("hidden");
+  $("btnSavePwd").onclick = async () => {
+    const oldP = $("pwdOld").value.trim(), np = $("pwdNew").value, np2 = $("pwdNew2").value;
+    if (!oldP) { $("pwdStatus").textContent = "请输入当前密码"; return; }
+    if (np.length < 6 || np.length > 32) { $("pwdStatus").textContent = "新密码需 6-32 位"; return; }
+    if (np !== np2) { $("pwdStatus").textContent = "两次输入的新密码不一致"; return; }
+    try {
+      await api("/api/auth/change-password", "POST", { old_password: oldP, new_password: np });
+      $("pwdStatus").textContent = "";
+      $("pwdModal").classList.add("hidden");
+      showToast("密码修改成功", "success");
+    } catch (e) { $("pwdStatus").textContent = "修改失败：" + e.message; }
+  };
   $("btnCloseAdmin").onclick = () => $("adminModal").classList.add("hidden");
   $("adminModal").addEventListener("click", (e) => { if (e.target === $("adminModal")) $("adminModal").classList.add("hidden"); });
   ADMIN_TABS.forEach(t => { $("adminTab" + t).onclick = () => switchAdminTab(t); });

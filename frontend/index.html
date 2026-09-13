@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Probe‑Plan‑Teach 超级学习系统</title>
 <link rel="stylesheet" href="/static/vendor/vditor/index.css">
-<link rel="stylesheet" href="/static/style.css?v=13">
+<link rel="stylesheet" href="/static/style.css?v=15">
 </head>
 <body>
   <!-- ========== 登录 / 注册视图 ========== -->
@@ -46,6 +46,7 @@
         <div class="user-bar">
           <span id="userBadge" class="badge">用户</span>
           <span id="userName">—</span>
+          <button id="btnChangePwd" class="mini-btn hidden">🔑 修改密码</button>
           <button id="btnAdminPanel" class="mini-btn hidden">🛡 管理后台</button>
           <button id="btnLogout" class="mini-btn">退出登录</button>
         </div>
@@ -327,6 +328,28 @@
     </div>
   </div>
 
+  <!-- ========== 修改密码弹层 ========== -->
+  <div id="pwdModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>🔑 修改密码</h3>
+        <button id="btnClosePwd" class="mini-btn">✕ 关闭</button>
+      </div>
+      <div class="material-upload">
+        <label>当前密码</label>
+        <input id="pwdOld" type="password" placeholder="输入当前密码" autocomplete="current-password">
+        <label>新密码</label>
+        <input id="pwdNew" type="password" placeholder="6-32 位" autocomplete="new-password">
+        <label>确认新密码</label>
+        <input id="pwdNew2" type="password" placeholder="再次输入新密码" autocomplete="new-password">
+        <div>
+          <button id="btnSavePwd" class="mini-btn">💾 确认修改</button>
+          <span id="pwdStatus" class="hint"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== 管理员后台弹层（仅 admin 角色可见） ========== -->
   <div id="adminModal" class="modal hidden">
     <div class="modal-box modal-wide">
@@ -449,6 +472,6 @@
   <input id="fileInput" type="file" accept=".epub,.pdf,.docx,.doc,.txt,.md,.markdown,.html,.htm,.pptx,.xlsx,.xls,.csv" class="hidden">
 
 <script src="/static/vendor/vditor/index.min.js"></script>
-<script src="/static/app.js?v=13"></script>
+<script src="/static/app.js?v=15"></script>
 </body>
 </html>
