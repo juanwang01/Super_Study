@@ -51,6 +51,21 @@ def file_hash(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()[:24]
 
 
+CONFIG_PATH = Path.home() / ".superstudy_sync.json"
+
+
+def save_config(args) -> None:
+    cfg = {"server": args.server, "user": args.user, "password": args.password, "vault": str(args.vault)}
+    CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    print(f"💾 配置已保存：{CONFIG_PATH}")
+
+
+def load_config() -> dict:
+    if CONFIG_PATH.is_file():
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    return {}
+
+
 def norm(vault_root: Path, name: str) -> Path:
     safe = "".join(c for c in name if c not in '\\/:*?"<>|').strip()
     return vault_root / safe
@@ -133,13 +148,29 @@ def sync_project(base: str, token: str, proj: dict, vault_root: Path, verbose: b
 
 def main():
     ap = argparse.ArgumentParser(description="超级学习系统电脑端同步客户端")
-    ap.add_argument("--server", required=True, help="服务器地址，如 http://47.94.251.143:8080")
-    ap.add_argument("--user", required=True)
-    ap.add_argument("--pass", dest="password", required=True)
-    ap.add_argument("--vault", required=True, help="Obsidian vault 根目录")
+    ap.add_argument("--server", default="", help="服务器地址，如 http://47.94.251.143:8080（缺省读已保存配置）")
+    ap.add_argument("--user", default="")
+    ap.add_argument("--pass", dest="password", default="")
+    ap.add_argument("--vault", default="", help="Obsidian vault 根目录（缺省读已保存配置）")
     ap.add_argument("--once", action="store_true", help="只同步一轮后退出（默认每 300 秒循环）")
     ap.add_argument("--interval", type=int, default=300)
+    ap.add_argument("--save", action="store_true", help="保存本次配置并退出")
     args = ap.parse_args()
+
+    # 未显式传参时读取已保存配置
+    if not (args.server and args.user and args.password and args.vault):
+        cfg = load_config()
+        if not cfg:
+            print("❌ 未找到配置。首次使用请传全参数：--server --user --pass --vault [--save]")
+            sys.exit(1)
+        args.server = cfg.get("server", "")
+        args.user = cfg.get("user", "")
+        args.password = cfg.get("password", "")
+        args.vault = cfg.get("vault", "")
+
+    if args.save:
+        save_config(args)
+        return
 
     base = args.server.rstrip("/")
     vault_root = Path(args.vault)
