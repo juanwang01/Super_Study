@@ -50,8 +50,16 @@ def index():
     return resp
 
 
+class NoCacheStaticFiles(StaticFiles):
+    """静态资源不缓存：确保手机/浏览器每次都拿到最新前端（配合 ?v=N 双保险）。"""
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+
 if FRONTEND_DIR.exists():
-    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+    app.mount("/static", NoCacheStaticFiles(directory=FRONTEND_DIR), name="static")
 
 
 def _idle_sweeper() -> None:
