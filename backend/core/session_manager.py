@@ -28,6 +28,7 @@ class Session:
         self.snapshot_mtime: float | None = None    # 加载快照时的磁盘 mtime（并发检测）
         self.messages: list[dict[str, Any]] = []    # 本会话与 LLM 的对话历史
         self.current_thread: str | None = None      # 项目内会话（线程）id
+        self.summary: str = ""                      # 当前线程的压缩摘要（历史上下文）
         self.model_provider: int | None = None      # 当前使用的 LLM 供应商 id（None=系统默认）
         self.created_at: float = time.time()
         self.updated_at: float = time.time()
@@ -80,6 +81,7 @@ class SessionManager:
                 thread = pt.create_thread(project_id, "默认会话")
             session.current_thread = thread["thread_id"]
             session.messages = pt.load_messages(project_id, thread["thread_id"])
+            session.summary = pt.get_summary(project_id, thread["thread_id"])
             session.touch()
 
         return {
@@ -131,6 +133,7 @@ class SessionManager:
             self._persist_thread(session)
             session.current_thread = thread_id
             session.messages = pt.load_messages(session.project_id, thread_id)
+            session.summary = pt.get_summary(session.project_id, thread_id)
             session.touch()
         return {
             "thread_id": thread_id,
@@ -148,6 +151,7 @@ class SessionManager:
             thread = pt.create_thread(session.project_id, name)
             session.current_thread = thread["thread_id"]
             session.messages = []
+            session.summary = ""
             session.touch()
         return {**thread, "threads": pt.list_threads(session.project_id)}
 
@@ -163,6 +167,7 @@ class SessionManager:
                 session.learner_state = {}
                 session.snapshot_mtime = None
                 session.messages = []
+                session.summary = ""
                 session.current_thread = None
             session.touch()
         return result
@@ -182,7 +187,7 @@ class SessionManager:
             return {"saved": True, **result}
 
     def sweep_idle(self) -> int:
-        """回收闲置会话（保存快照后移除），返回回收数量。"""
+        """闲置会话保底保存快照；【绝不删除会话】——会话只能由用户手动删除。"""
         now = time.time()
         removed = 0
         with self._lock:
@@ -194,11 +199,6 @@ class SessionManager:
                         self._save_snapshot(s)
                     except Exception:
                         pass
-                    del self._sessions[sid]
-                    removed += 1
-                elif now - s.updated_at > self._idle_seconds:
-                    del self._sessions[sid]
-                    removed += 1
         return removed
 
 

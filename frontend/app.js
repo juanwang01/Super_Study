@@ -1318,8 +1318,25 @@ function bindFileInputs() {
       hideThreadDropdown();
       await reloadChatHistory();
       await loadThreads();
+      // 新会话必须读取资料与学习状态：触发 AI 准备分析（状态/资料缺口）
+      if (currentProject) smartMaterialCheck(currentProject.project_id);
     } catch (err) {
       showToast("新建会话失败：" + err.message, "error");
+    }
+  };
+  $("btnCompressThread").onclick = async () => {
+    if (!currentThreadId) return;
+    try {
+      const r = await api(`/api/session/${sessionId}/threads/${currentThreadId}/compress`, "POST");
+      if (r.compressed) {
+        showToast(`✅ 已压缩：保留最近 ${r.kept} 条，早期内容已存入摘要`, "success");
+        await reloadChatHistory();
+        await loadThreads();
+      } else {
+        showToast(r.reason || "暂无法压缩", "info");
+      }
+    } catch (err) {
+      showToast("压缩失败：" + err.message, "error");
     }
   };
   $("btnCloseNote").onclick = () => $("noteModal").classList.add("hidden");

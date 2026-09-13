@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Probe‑Plan‑Teach 超级学习系统</title>
 <link rel="stylesheet" href="/static/vendor/vditor/index.css">
-<link rel="stylesheet" href="/static/style.css?v=12">
+<link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
   <!-- ========== 登录 / 注册视图 ========== -->
@@ -190,6 +190,7 @@
           <div class="thread-bar">
             <button id="btnThreadSelect" class="thread-select" title="切换会话">💬 <span id="threadName">默认会话</span> <span class="caret">▾</span></button>
             <button id="btnNewThread" class="mini-btn" title="新建会话">＋ 新会话</button>
+<button id="btnCompressThread" class="mini-btn" title="压缩上下文：把早期对话总结成摘要，释放上下文空间">🧹 压缩</button>
             <div id="threadDropdown" class="thread-dropdown hidden"></div>
             <select id="modelSelect" class="model-select" title="切换当前会话使用的模型">
               <option value="">加载模型…</option>
@@ -448,6 +449,6 @@
   <input id="fileInput" type="file" accept=".epub,.pdf,.docx,.doc,.txt,.md,.markdown,.html,.htm,.pptx,.xlsx,.xls,.csv" class="hidden">
 
 <script src="/static/vendor/vditor/index.min.js"></script>
-<script src="/static/app.js?v=12"></script>
+<script src="/static/app.js?v=13"></script>
 </body>
 </html>

@@ -421,14 +421,106 @@ def _chat_completion(messages: list[dict[str, Any]], tools: list[dict[str, Any]]
         return resp.json()
 
 
+AUTO_COMPRESS_THRESHOLD = 60   # 历史超过该条数自动压缩
+AUTO_COMPRESS_KEEP = 20        # 压缩后保留的最近消息数
+COMPRESS_PROMPT = (
+    "你是学习系统的对话压缩器。请把下面给出的【旧对话摘要】与【待压缩对话】合并，"
+    "压缩成一份新的中文摘要（不超过 400 字），必须保留："
+    "① 已学知识点与关键结论；② 学习者水平与掌握情况；③ 当前教学单元与进度；"
+    "④ 尚未解决的问题与下一步计划。直接输出摘要正文，不要任何解释。"
+)
+
+
+def _summarize(session: Session, texts: str) -> str:
+    """调用 LLM 把对话文本压缩为摘要（失败时返回空串，不影响主流程）。"""
+    if not (texts or "").strip():
+        return ""
+    try:
+        msgs = [
+            {"role": "system", "content": "你是对话摘要助手。"},
+            {"role": "user", "content": COMPRESS_PROMPT + "\n\n" + texts[:8000]},
+        ]
+        data = _chat_completion(msgs, None, session=session)
+        content = ((data.get("choices") or [{}])[0]
+                   .get("message", {}).get("content") or "").strip()
+        return content[:1200]
+    except Exception:
+        return ""
+
+
+def _auto_compress(session: Session) -> bool:
+    """历史超阈值时：旧摘要+前部消息 → 新摘要，只保留最近消息。"""
+    if len(session.messages) <= AUTO_COMPRESS_THRESHOLD:
+        return False
+    old_msgs = session.messages[:-AUTO_COMPRESS_KEEP]
+    texts = _format_history(old_msgs)
+    combined = ((session.summary + "\n\n" + texts) if session.summary else texts)
+    new_summary = _summarize(session, combined)
+    if not new_summary:
+        return False   # 压缩失败则保留原历史，不丢内容
+    session.summary = new_summary
+    session.messages = session.messages[-AUTO_COMPRESS_KEEP:]
+    try:
+        if session.project_id and session.current_thread:
+            pt.set_summary(session.project_id, session.current_thread, session.summary)
+            pt.save_messages(session.project_id, session.current_thread, session.messages)
+    except Exception:
+        pass
+    return True
+
+
+def _format_history(msgs: list[dict[str, Any]]) -> str:
+    """把消息列表格式化为文本（user/assistant 交替）。"""
+    out = []
+    for m in msgs:
+        role = "用户" if m.get("role") == "user" else "AI"
+        content = (m.get("content") or "").strip()
+        if content:
+            out.append(f"{role}：{content}")
+    return "\n".join(out[-60:])
+
+
+def compress_thread(session: Session) -> dict[str, Any]:
+    """手动压缩当前会话（供前端「压缩上下文」按钮调用）。"""
+    with session._lock:
+        if not session.project_id or not session.current_thread:
+            return {"compressed": False, "reason": "未绑定项目"}
+        if len(session.messages) <= 10:
+            return {"compressed": False, "reason": "对话还很少，暂无需压缩",
+                    "summary": session.summary}
+        old_msgs = session.messages[:-10]
+        texts = _format_history(old_msgs)
+        combined = ((session.summary + "\n\n" + texts) if session.summary else texts)
+        new_summary = _summarize(session, combined)
+        if not new_summary:
+            return {"compressed": False, "reason": "压缩失败（LLM 未返回），请重试",
+                    "summary": session.summary}
+        session.summary = new_summary
+        session.messages = session.messages[-10:]
+        try:
+            pt.set_summary(session.project_id, session.current_thread, session.summary)
+            pt.save_messages(session.project_id, session.current_thread, session.messages)
+        except Exception:
+            pass
+        session.touch()
+        return {"compressed": True, "summary": new_summary,
+                "kept": len(session.messages), "removed": len(old_msgs)}
+
+
 def run_conversation(session: Session, user_message: str) -> dict[str, Any]:
     """执行一轮对话：组装消息 → LLM 循环（含工具调用）→ 返回最终回复。"""
     # 每次对话前刷新项目上下文：素材/模式/学习者状态以磁盘为权威，
     # 避免旧会话感知不到上传后的新素材（general → document_anchor）
     _refresh_project_context(session)
+    # 历史过长时自动压缩（保留最近消息，旧内容进摘要）
+    _auto_compress(session)
     system_prompt = build_system_prompt(session)
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+    # 历史摘要（压缩后）作为第二条系统消息，让 AI 记住早期内容
+    if session.summary:
+        messages.append({"role": "system",
+                         "content": f"【本会话早期内容摘要（已压缩）】\n{session.summary}"})
     # 会话历史（保留最近 40 条）
     messages.extend(session.messages[-40:])
     messages.append({"role": "user", "content": user_message})

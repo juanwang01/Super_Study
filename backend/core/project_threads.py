@@ -137,6 +137,25 @@ def save_messages(project_id: str, thread_id: str, messages: list[dict[str, Any]
     _write(project_id, thread_id, data)
 
 
+def get_summary(project_id: str, thread_id: str) -> str:
+    """读取会话压缩摘要（无则空串）。"""
+    data = _read(project_id, thread_id)
+    if not data:
+        return ""
+    return data.get("summary", "") or ""
+
+
+def set_summary(project_id: str, thread_id: str, summary: str) -> None:
+    """写入会话摘要（保留 messages 与元信息）。"""
+    data = _read(project_id, thread_id)
+    if data is None:
+        data = {"thread_id": thread_id, "name": "未命名会话",
+                "created_at": time.time(), "messages": []}
+    data["summary"] = (summary or "").strip()
+    data["updated_at"] = time.time()
+    _write(project_id, thread_id, data)
+
+
 def rename_thread(project_id: str, thread_id: str, name: str) -> dict[str, Any]:
     data = _read(project_id, thread_id)
     if data is None:

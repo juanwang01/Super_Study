@@ -184,6 +184,23 @@ def activate_thread(session_id: str, thread_id: str, user: dict = Depends(get_cu
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.post("/{session_id}/threads/{thread_id}/compress")
+def compress_thread_endpoint(session_id: str, thread_id: str,
+                             user: dict = Depends(get_current_user)):
+    """手动压缩当前会话上下文（旧消息→摘要，只保留最近消息）。"""
+    s = _session_owner(session_id, user)
+    s = session_manager.get_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="会话不存在或已过期")
+    if not s.project_id:
+        raise HTTPException(status_code=400, detail="未绑定项目")
+    if thread_id != s.current_thread:
+        # 允许压缩任意自己的会话：临时切换目标线程再压缩
+        raise HTTPException(status_code=400, detail="请先切换到该会话再压缩")
+    from core.agent_bridge import compress_thread
+    return compress_thread(s)
+
+
 @router.post("/{session_id}/threads/{thread_id}/rename")
 def rename_thread(session_id: str, thread_id: str, body: ThreadNameBody):
     s = session_manager.get_session(session_id)
