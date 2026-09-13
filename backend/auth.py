@@ -128,16 +128,27 @@ def verify_password(password: str, stored: str) -> bool:
 # JWT（HMAC-SHA256 自签）
 # ---------------------------------------------------------------------------
 def _jwt_secret() -> str:
-    """读取或生成 JWT 密钥（持久化在 .env，重启不失效）。"""
-    if ENV_FILE.exists():
-        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("LEARN_AUTH_SECRET="):
-                return line.split("=", 1)[1].strip()
+    """读取或生成 JWT 密钥（持久化在数据卷 .auth_secret，容器重建不失效）。
+
+    修复：secret 曾存 backend/.env（容器内），docker 重建后丢失导致
+    所有已登录用户 token 失效（表现为"创建项目失败：登录已过期"）。
+    现在存 DATA_ROOT（数据卷 /app/data）并自动迁移旧密钥。
+    """
+    secret_file = DATA_ROOT / ".auth_secret"
+    if not secret_file.exists() and ENV_FILE.exists():
+        try:
+            for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("LEARN_AUTH_SECRET="):
+                    secret_file.write_text(line.split("=", 1)[1].strip(), encoding="utf-8")
+                    break
+        except OSError:
+            pass
+    if secret_file.exists():
+        return secret_file.read_text(encoding="utf-8").strip()
     secret = secrets.token_hex(32)
     try:
-        with ENV_FILE.open("a", encoding="utf-8") as f:
-            f.write(f"LEARN_AUTH_SECRET={secret}\n")
+        secret_file.write_text(secret, encoding="utf-8")
     except OSError:
         pass
     return secret
